@@ -1,0 +1,16 @@
+[project]
+name = "waya-bot-builder"
+version = "1.0.0"
+description = "Waya - The Ultimate Intelligent Telegram Bot Builder with Groq AI"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.128.1",
+    "python-telegram-bot>=22.7",
+    "groq>=0.18.0",
+    "apscheduler>=3.11.0",
+    "aiosqlite>=0.20.0",
+    "httpx>=0.28.0",
+    "pydantic>=2.10.0",
+    "python-dateutil>=2.9.0",
+    "pytz>=2024.2",
+]
