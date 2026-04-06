@@ -4,14 +4,15 @@ Powered by Groq AI for lightning-fast intelligent responses.
 
 Features:
 - AI-powered conversations with context memory
-- Reminder and task management
-- Note-taking with search
-- Custom bot building
-- AI personalities
+- Reminder and task management with natural language
+- Note-taking with full-text search
+- Custom bot building with 12+ templates
+- AI personalities customization
 - Polls and quizzes
 - Smart suggestions
 - Multi-language translation
 - Text summarization
+- Gamification with XP and streaks
 - And much more!
 
 Author: Waya Team
@@ -19,7 +20,6 @@ Version: 1.0.0
 """
 
 import os
-import json
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -28,7 +28,7 @@ import fastapi
 import fastapi.middleware.cors
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import (
     Application, 
     CommandHandler, 
@@ -37,23 +37,24 @@ from telegram.ext import (
     filters
 )
 
-from database import init_database
-from scheduler import WayaScheduler, set_scheduler
+import database as db
+from scheduler import WayaScheduler
 from handlers import (
     start_command, help_command, menu_command,
-    remind_command, reminders_command, del_reminder_command,
+    remind_command, reminders_command, del_reminder_command, snooze_reminder_command,
     note_command, notes_command, search_notes_command, del_note_command,
     task_command, tasks_command, done_command, del_task_command,
-    build_command, my_bots_command, templates_command,
+    build_command, my_bots_command, templates_command, activate_bot_command,
     chat_command, clear_command, translate_command, summarize_command, quiz_command,
     personalities_command, new_personality_command, set_personality_command,
     poll_command, poll_results_command,
     stats_command, settings_command, suggest_command, feedback_command,
+    profile_command, leaderboard_command,
     handle_message, handle_callback, error_handler
 )
 
 
-# Global application instance
+# Global instances
 telegram_app: Optional[Application] = None
 scheduler: Optional[WayaScheduler] = None
 
@@ -75,40 +76,53 @@ async def setup_telegram_app() -> Application:
     
     # Register command handlers
     commands = [
+        # Core
         ("start", start_command),
         ("help", help_command),
         ("menu", menu_command),
+        ("profile", profile_command),
+        ("leaderboard", leaderboard_command),
+        
         # Reminders
         ("remind", remind_command),
         ("reminders", reminders_command),
         ("delreminder", del_reminder_command),
+        ("snooze", snooze_reminder_command),
+        
         # Notes
         ("note", note_command),
         ("notes", notes_command),
         ("searchnotes", search_notes_command),
         ("delnote", del_note_command),
+        
         # Tasks
         ("task", task_command),
         ("tasks", tasks_command),
         ("done", done_command),
         ("deltask", del_task_command),
+        
         # Bot Building
         ("build", build_command),
         ("mybots", my_bots_command),
         ("templates", templates_command),
+        ("usebot", activate_bot_command),
+        
         # AI Chat
         ("chat", chat_command),
         ("clear", clear_command),
         ("translate", translate_command),
         ("summarize", summarize_command),
         ("quiz", quiz_command),
+        
         # Personalities
         ("personalities", personalities_command),
         ("newpersonality", new_personality_command),
         ("setpersonality", set_personality_command),
+        
         # Polls
         ("poll", poll_command),
         ("pollresults", poll_results_command),
+        
         # Other
         ("stats", stats_command),
         ("settings", settings_command),
@@ -136,41 +150,54 @@ async def lifespan(app: fastapi.FastAPI):
     """Application lifespan manager."""
     global telegram_app, scheduler
     
-    print("🚀 Starting Waya Bot Builder...")
+    print("=" * 50)
+    print("🚀 Starting Waya Bot Builder v1.0.0")
+    print("=" * 50)
     
-    # Initialize database
-    await init_database()
-    print("✅ Database initialized")
+    # Initialize PostgreSQL database
+    try:
+        await db.init_db()
+        print("✅ PostgreSQL database initialized")
+    except Exception as e:
+        print(f"❌ Database error: {e}")
+        raise
     
     # Set up Telegram application
     try:
         telegram_app = await setup_telegram_app()
         await telegram_app.initialize()
-        print("✅ Telegram bot initialized")
+        bot_info = await telegram_app.bot.get_me()
+        print(f"✅ Telegram bot initialized: @{bot_info.username}")
         
-        # Set up scheduler
+        # Set up scheduler for reminders
         scheduler = WayaScheduler(telegram_app.bot)
-        set_scheduler(scheduler)
         await scheduler.start()
-        print("✅ Scheduler started")
+        print("✅ Reminder scheduler started")
         
     except ValueError as e:
         print(f"⚠️ Telegram setup skipped: {e}")
     except Exception as e:
-        print(f"❌ Error setting up Telegram: {e}")
+        print(f"❌ Telegram error: {e}")
     
-    print("🤖 Waya is ready!")
+    print("=" * 50)
+    print("🤖 Waya is ready and listening!")
+    print("=" * 50)
     
     yield
     
     # Shutdown
-    print("🛑 Shutting down Waya...")
+    print("\n🛑 Shutting down Waya...")
     
     if scheduler:
         await scheduler.stop()
+        print("✅ Scheduler stopped")
     
     if telegram_app:
         await telegram_app.shutdown()
+        print("✅ Telegram bot stopped")
+    
+    await db.close_db()
+    print("✅ Database connection closed")
     
     print("👋 Waya stopped!")
 
@@ -193,39 +220,63 @@ app.add_middleware(
 )
 
 
+# =====================================================
+# HEALTH & INFO ENDPOINTS
+# =====================================================
+
 @app.get("/")
 async def root():
     """Root endpoint - health check and info."""
     return {
         "name": "Waya",
-        "description": "The Ultimate Intelligent Telegram Bot Builder",
+        "tagline": "The Ultimate Intelligent Telegram Bot Builder",
         "version": "1.0.0",
         "status": "running",
+        "powered_by": "Groq AI",
+        "database": "PostgreSQL",
         "features": [
-            "AI-powered conversations with Groq",
-            "Reminder management",
-            "Note-taking with search",
-            "Task management",
-            "Custom bot building",
-            "AI personalities",
-            "Polls and quizzes",
-            "Smart suggestions",
+            "AI-powered conversations with context memory",
+            "Natural language reminder parsing",
+            "Note-taking with full-text search",
+            "Task management with priorities",
+            "Custom bot building (12+ templates)",
+            "AI personalities customization",
+            "Polls and AI-generated quizzes",
+            "Smart context-aware suggestions",
             "Multi-language translation",
-            "Text summarization"
+            "Text summarization",
+            "Gamification (XP, levels, streaks)",
+            "Analytics and insights"
         ],
-        "telegram_connected": telegram_app is not None
+        "telegram_connected": telegram_app is not None,
+        "documentation": "/docs"
     }
 
 
 @app.get("/health")
 async def health():
     """Health check endpoint."""
+    db_healthy = False
+    try:
+        async with db.get_connection() as conn:
+            await conn.fetchval("SELECT 1")
+            db_healthy = True
+    except:
+        pass
+    
     return {
-        "status": "healthy",
-        "telegram": "connected" if telegram_app else "disconnected",
-        "scheduler": "running" if scheduler and scheduler._is_running else "stopped"
+        "status": "healthy" if db_healthy and telegram_app else "degraded",
+        "components": {
+            "database": "healthy" if db_healthy else "unhealthy",
+            "telegram": "connected" if telegram_app else "disconnected",
+            "scheduler": "running" if scheduler and scheduler._running else "stopped"
+        }
     }
 
+
+# =====================================================
+# TELEGRAM WEBHOOK ENDPOINTS
+# =====================================================
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -237,13 +288,13 @@ async def webhook(request: Request):
         data = await request.json()
         update = Update.de_json(data, telegram_app.bot)
         
-        # Process update asynchronously
+        # Process update
         await telegram_app.process_update(update)
         
         return {"status": "ok"}
     
     except Exception as e:
-        print(f"Webhook error: {e}")
+        print(f"[Webhook Error] {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -260,20 +311,28 @@ async def set_webhook(request: Request):
         if not webhook_url:
             raise HTTPException(status_code=400, detail="URL is required")
         
-        # Set webhook
-        result = await telegram_app.bot.set_webhook(url=f"{webhook_url}/webhook")
+        # Ensure URL ends with /webhook
+        full_url = f"{webhook_url.rstrip('/')}/webhook"
+        
+        # Set webhook with allowed updates
+        result = await telegram_app.bot.set_webhook(
+            url=full_url,
+            allowed_updates=["message", "callback_query", "poll", "poll_answer"]
+        )
         
         # Get bot info
         bot_info = await telegram_app.bot.get_me()
         
         return {
             "status": "success",
+            "webhook_url": full_url,
             "webhook_set": result,
             "bot": {
                 "id": bot_info.id,
                 "username": bot_info.username,
                 "first_name": bot_info.first_name
-            }
+            },
+            "instructions": f"Bot is now active! Message @{bot_info.username} on Telegram to start."
         }
     
     except Exception as e:
@@ -287,11 +346,36 @@ async def delete_webhook():
         raise HTTPException(status_code=503, detail="Telegram bot not initialized")
     
     try:
-        result = await telegram_app.bot.delete_webhook()
+        result = await telegram_app.bot.delete_webhook(drop_pending_updates=True)
         return {"status": "success", "webhook_deleted": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/webhook-info")
+async def webhook_info():
+    """Get current webhook information."""
+    if not telegram_app:
+        raise HTTPException(status_code=503, detail="Telegram bot not initialized")
+    
+    try:
+        info = await telegram_app.bot.get_webhook_info()
+        return {
+            "url": info.url,
+            "has_custom_certificate": info.has_custom_certificate,
+            "pending_update_count": info.pending_update_count,
+            "last_error_date": info.last_error_date,
+            "last_error_message": info.last_error_message,
+            "max_connections": info.max_connections,
+            "allowed_updates": info.allowed_updates
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================================================
+# BOT INFO ENDPOINTS
+# =====================================================
 
 @app.get("/bot-info")
 async def bot_info():
@@ -313,37 +397,56 @@ async def bot_info():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# =====================================================
+# STATISTICS ENDPOINTS
+# =====================================================
+
 @app.get("/stats")
 async def get_stats():
-    """Get bot statistics."""
-    from database import get_db
-    
-    async with await get_db() as db:
-        # Get user count
-        cursor = await db.execute("SELECT COUNT(*) as count FROM users")
-        users = (await cursor.fetchone())['count']
-        
-        # Get reminder count
-        cursor = await db.execute("SELECT COUNT(*) as count FROM reminders WHERE is_completed = 0")
-        reminders = (await cursor.fetchone())['count']
-        
-        # Get custom bots count
-        cursor = await db.execute("SELECT COUNT(*) as count FROM custom_bots")
-        bots = (await cursor.fetchone())['count']
-        
-        # Get total messages
-        cursor = await db.execute("SELECT SUM(total_messages) as total FROM users")
-        messages = (await cursor.fetchone())['total'] or 0
-        
-        return {
-            "total_users": users,
-            "pending_reminders": reminders,
-            "custom_bots": bots,
-            "total_messages": messages
-        }
+    """Get overall bot statistics."""
+    try:
+        async with db.get_connection() as conn:
+            # Get counts
+            users = await conn.fetchval("SELECT COUNT(*) FROM users")
+            reminders = await conn.fetchval("SELECT COUNT(*) FROM reminders WHERE is_active = TRUE AND is_completed = FALSE")
+            notes = await conn.fetchval("SELECT COUNT(*) FROM notes WHERE is_archived = FALSE")
+            tasks = await conn.fetchval("SELECT COUNT(*) FROM tasks WHERE status NOT IN ('completed', 'cancelled')")
+            bots = await conn.fetchval("SELECT COUNT(*) FROM custom_bots")
+            
+            # Get total messages
+            total_messages = await conn.fetchval("SELECT SUM(total_messages) FROM user_stats") or 0
+            total_ai_requests = await conn.fetchval("SELECT SUM(total_ai_requests) FROM user_stats") or 0
+            
+            # Get active users (last 24h)
+            active_users = await conn.fetchval("""
+                SELECT COUNT(*) FROM users 
+                WHERE last_active_at >= NOW() - INTERVAL '24 hours'
+            """)
+            
+            return {
+                "users": {
+                    "total": users,
+                    "active_24h": active_users
+                },
+                "content": {
+                    "reminders": reminders,
+                    "notes": notes,
+                    "tasks": tasks,
+                    "custom_bots": bots
+                },
+                "activity": {
+                    "total_messages": total_messages,
+                    "total_ai_requests": total_ai_requests
+                }
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# API endpoints for external integrations
+# =====================================================
+# API ENDPOINTS
+# =====================================================
+
 @app.post("/api/send-message")
 async def send_message(request: Request):
     """Send a message to a user via the bot."""
@@ -354,6 +457,7 @@ async def send_message(request: Request):
         data = await request.json()
         chat_id = data.get("chat_id")
         message = data.get("message")
+        parse_mode = data.get("parse_mode", "HTML")
         
         if not chat_id or not message:
             raise HTTPException(status_code=400, detail="chat_id and message are required")
@@ -361,79 +465,74 @@ async def send_message(request: Request):
         result = await telegram_app.bot.send_message(
             chat_id=chat_id,
             text=message,
-            parse_mode="Markdown"
+            parse_mode=parse_mode
         )
         
         return {
             "status": "success",
-            "message_id": result.message_id
+            "message_id": result.message_id,
+            "chat_id": result.chat_id
         }
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/broadcast")
-async def broadcast(request: Request):
-    """Broadcast a message to all users."""
-    if not telegram_app:
-        raise HTTPException(status_code=503, detail="Telegram bot not initialized")
-    
+@app.get("/api/templates")
+async def get_templates(category: str = None, featured: bool = False):
+    """Get bot templates."""
     try:
-        data = await request.json()
-        message = data.get("message")
+        templates = await db.get_bot_templates(category=category, featured_only=featured)
+        return {
+            "count": len(templates),
+            "templates": templates
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/templates/categories")
+async def get_template_categories():
+    """Get all template categories."""
+    try:
+        async with db.get_connection() as conn:
+            rows = await conn.fetch("""
+                SELECT DISTINCT category, COUNT(*) as count 
+                FROM bot_templates 
+                GROUP BY category 
+                ORDER BY count DESC
+            """)
+            return {
+                "categories": [{"name": r["category"], "count": r["count"]} for r in rows]
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/{user_id}")
+async def get_user_info(user_id: int):
+    """Get user information."""
+    try:
+        user = await db.get_user(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
         
-        if not message:
-            raise HTTPException(status_code=400, detail="message is required")
-        
-        from database import get_db
-        
-        async with await get_db() as db:
-            cursor = await db.execute("SELECT user_id FROM users")
-            users = await cursor.fetchall()
-        
-        sent = 0
-        failed = 0
-        
-        for user in users:
-            try:
-                await telegram_app.bot.send_message(
-                    chat_id=user['user_id'],
-                    text=message,
-                    parse_mode="Markdown"
-                )
-                sent += 1
-            except Exception:
-                failed += 1
-            
-            # Rate limiting
-            await asyncio.sleep(0.05)
+        stats = await db.get_user_stats(user_id)
         
         return {
-            "status": "success",
-            "sent": sent,
-            "failed": failed
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "first_name": user["first_name"],
+                "created_at": str(user["created_at"]),
+                "last_active": str(user["last_active_at"])
+            },
+            "stats": stats
         }
-    
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# Templates API
-@app.get("/api/templates")
-async def get_templates():
-    """Get all bot templates."""
-    from database import get_bot_templates
-    templates = await get_bot_templates()
-    return {"templates": templates}
-
-
-@app.get("/api/templates/{category}")
-async def get_templates_by_category(category: str):
-    """Get bot templates by category."""
-    from database import get_bot_templates
-    templates = await get_bot_templates(category=category)
-    return {"templates": templates}
 
 
 if __name__ == "__main__":
