@@ -319,6 +319,16 @@ async def _init_schema():
                 total_conversations INT DEFAULT 0,
                 rating DECIMAL(3,2) DEFAULT 0,
                 rating_count INT DEFAULT 0,
+                unique_users_count INT DEFAULT 0,
+                
+                -- Business Bot Config (for Telegram Business accounts)
+                business_config JSONB DEFAULT '{}'::jsonb,
+                
+                -- Channel Bot Config (for channel management)
+                channel_config JSONB DEFAULT '{}'::jsonb,
+                
+                -- Extended config (all additional settings)
+                config JSONB DEFAULT '{}'::jsonb,
                 
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -326,6 +336,48 @@ async def _init_schema():
             CREATE INDEX IF NOT EXISTS idx_bot_user ON custom_bots(user_id);
             CREATE INDEX IF NOT EXISTS idx_bot_type ON custom_bots(bot_type);
             CREATE INDEX IF NOT EXISTS idx_bot_public ON custom_bots(is_public, rating DESC) WHERE is_public = TRUE;
+            
+            -- Bot-specific polls (for users to add to their bots)
+            CREATE TABLE IF NOT EXISTS bot_polls (
+                id SERIAL PRIMARY KEY,
+                bot_id INT NOT NULL REFERENCES custom_bots(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                question TEXT NOT NULL,
+                options JSONB NOT NULL,
+                config JSONB DEFAULT '{}'::jsonb,
+                poll_type VARCHAR(20) DEFAULT 'regular' CHECK (poll_type IN ('regular', 'quiz')),
+                is_active BOOLEAN DEFAULT TRUE,
+                usage_count INT DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_bot_polls_bot ON bot_polls(bot_id);
+            
+            -- Bot automations (triggers and actions)
+            CREATE TABLE IF NOT EXISTS bot_automations (
+                id SERIAL PRIMARY KEY,
+                bot_id INT NOT NULL REFERENCES custom_bots(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                trigger_word VARCHAR(255) NOT NULL,
+                action_type VARCHAR(50) NOT NULL,
+                action_data JSONB NOT NULL,
+                conditions JSONB DEFAULT '{}'::jsonb,
+                enabled BOOLEAN DEFAULT TRUE,
+                usage_count INT DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_bot_automations_bot ON bot_automations(bot_id);
+            
+            -- Bot messages tracking (for analytics)
+            CREATE TABLE IF NOT EXISTS bot_messages (
+                id BIGSERIAL PRIMARY KEY,
+                bot_id INT NOT NULL REFERENCES custom_bots(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                message_type VARCHAR(50) DEFAULT 'text',
+                direction VARCHAR(10) DEFAULT 'in' CHECK (direction IN ('in', 'out')),
+                content_length INT DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_bot_messages_bot ON bot_messages(bot_id, created_at DESC);
             
             -- Bot templates library
             CREATE TABLE IF NOT EXISTS bot_templates (
@@ -1564,23 +1616,24 @@ async def delete_task(task_id: int, user_id: int) -> bool:
 async def create_custom_bot(
     user_id: int,
     name: str,
-    bot_type: str,
-    system_prompt: str,
+    bot_type: str = "custom",
+    system_prompt: str = "",
     description: str = None,
     category: str = None,
     welcome_message: str = None,
     personality: Dict = None,
     commands: List[Dict] = None,
-    settings: Dict = None
+    settings: Dict = None,
+    config: Dict = None
 ) -> int:
-    """Create a custom bot"""
+    """Create a custom bot with full configuration support"""
     async with get_connection() as conn:
         bot_id = await conn.fetchval('''
-            INSERT INTO custom_bots (user_id, name, description, bot_type, category, system_prompt, welcome_message, personality, commands, settings)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO custom_bots (user_id, name, description, bot_type, category, system_prompt, welcome_message, personality, commands, settings, config)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id
         ''', user_id, name, description, bot_type, category, system_prompt, welcome_message,
-            json.dumps(personality or {}), json.dumps(commands or []), json.dumps(settings or {}))
+            json.dumps(personality or {}), json.dumps(commands or []), json.dumps(settings or {}), json.dumps(config or {}))
         
         await increment_stat(user_id, "total_bots_created")
         return bot_id
