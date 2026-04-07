@@ -264,7 +264,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 💡 *Pro Tip:* You can just chat naturally - I understand context!
 """
     
-    await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+    # Use effective_message to support both direct commands and callback queries
+    message = update.effective_message
+    if message:
+        await message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -297,8 +300,12 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     stats = await db.get_user_stats(user_id)
     user = await db.get_user(user_id)
     
+    # Use effective_message to support both direct commands and callback queries
+    message = update.effective_message
+    
     if not stats:
-        await update.message.reply_text("Could not load your profile. Please try again.")
+        if message:
+            await message.reply_text("Could not load your profile. Please try again.")
         return
     
     # Calculate level progress
@@ -347,16 +354,20 @@ Keep chatting to earn more XP! 🚀
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        profile_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=reply_markup
-    )
+    if message:
+        await message.reply_text(
+            profile_text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
 
 
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /leaderboard command."""
     await track_command(update.effective_user.id, "leaderboard")
+    
+    # Use effective_message to support both direct commands and callback queries
+    message = update.effective_message
     
     async with db.get_connection() as conn:
         rows = await conn.fetch("""
@@ -368,7 +379,8 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         """)
     
     if not rows:
-        await update.message.reply_text("No users on the leaderboard yet!")
+        if message:
+            await message.reply_text("No users on the leaderboard yet!")
         return
     
     text = "🏆 *Waya Leaderboard*\n\n"
@@ -380,7 +392,8 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         text += f"{medal} *{name}*\n"
         text += f"    Level {row['level']} • {row['xp_points']:,} XP • 🔥{row['streak_days']}\n\n"
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    if message:
+        await message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
 # =====================================================
