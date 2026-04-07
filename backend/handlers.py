@@ -153,10 +153,85 @@ from ai_engine import (
     parse_reminder_request, parse_task_request, summarize_text, translate_text,
     generate_quiz_question, get_smart_suggestions, get_bot_system_prompt, WAYA_SYSTEM_PROMPT,
     transcribe_voice,  # 🎙 Groq Whisper
-    compound_response  # 🤖 COMPOUND - Agentic AI with tools!
+    compound_response,  # 🤖 COMPOUND - Agentic AI with tools!
+    generate_response_streaming  # Streaming responses for chat effect
 )
 from voice_engine import voice_engine, voice_preferences, VoiceEngine
 from emotion_engine import emotion_engine, EmotionEngine
+
+
+# Minimum interval between message edits to avoid Telegram rate limits
+STREAM_UPDATE_INTERVAL = 0.8  # seconds
+
+async def stream_response_to_message(
+    message,
+    response_generator,
+    initial_text: str = "...",
+    typing_indicator: str = " ▌"
+):
+    """
+    Stream AI response with a typing effect by editing the message.
+    Updates the message as chunks arrive, creating a 'live typing' effect.
+    """
+    import time
+    
+    # Send initial message
+    try:
+        sent_msg = await message.reply_text(initial_text + typing_indicator)
+    except Exception as e:
+        # Fallback if we can't send
+        return None, str(e)
+    
+    full_response = ""
+    last_update_time = time.time()
+    last_text_length = 0
+    
+    try:
+        async for chunk in response_generator:
+            full_response += chunk
+            current_time = time.time()
+            
+            # Only update if enough time has passed and text has grown significantly
+            # This avoids Telegram rate limits (max ~20 edits per minute)
+            if (current_time - last_update_time >= STREAM_UPDATE_INTERVAL and 
+                len(full_response) - last_text_length >= 20):
+                try:
+                    # Truncate if too long for a single message
+                    display_text = full_response[:4000] if len(full_response) > 4000 else full_response
+                    await sent_msg.edit_text(display_text + typing_indicator)
+                    last_update_time = current_time
+                    last_text_length = len(full_response)
+                except Exception:
+                    # Ignore edit errors (rate limit, message unchanged, etc.)
+                    pass
+        
+        # Final update without typing indicator
+        if full_response:
+            try:
+                # Handle long messages
+                if len(full_response) > TELEGRAM_MAX_MESSAGE_LENGTH:
+                    # Delete the streaming message and use safe_reply_text for long content
+                    await sent_msg.delete()
+                    await safe_reply_text(message, full_response, parse_mode=ParseMode.MARKDOWN)
+                else:
+                    await sent_msg.edit_text(full_response, parse_mode=ParseMode.MARKDOWN)
+            except Exception:
+                # If markdown fails, try without
+                try:
+                    await sent_msg.edit_text(full_response)
+                except:
+                    pass
+        
+        return sent_msg, full_response
+        
+    except Exception as e:
+        # If streaming fails, return what we have
+        if full_response:
+            try:
+                await sent_msg.edit_text(full_response)
+            except:
+                pass
+        return sent_msg, full_response or str(e)
 
 
 def get_user_display_name(update: Update) -> str:
@@ -979,24 +1054,25 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     features = config.get('features', [])[:3]
     
     keyboard = [
-        [InlineKeyboardButton("💬 Chat Now", callback_data="start_chat"),
-         InlineKeyboardButton("🎤 Add Voice", callback_data="add_voice")],
-        [InlineKeyboardButton("📋 View Details", callback_data=f"view_bot_{bot_id}")]
+        [InlineKeyboardButton("💬 Start Chatting", callback_data="start_chat")],
+        [InlineKeyboardButton("🎤 Enable Voice", callback_data="add_voice"),
+         InlineKeyboardButton("📋 Details", callback_data=f"view_bot_{bot_id}")],
+        [InlineKeyboardButton("📝 My Bots", callback_data="menu_mybots")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Hidden spoiler for power user details
-    spoiler = f"System Prompt: {config.get('system_prompt', '')[:50]}..."
-    
     await loading_msg.edit_text(
-        f"✅ *{bot_name} Created!*\n\n"
-        f"✨ Your bot is ready!\n\n"
-        f"*What it does:* {desc}\n\n"
+        f"✅ *{bot_name}* is ready!\n\n"
+        f"*Description:* {desc}\n\n"
         f"*Features:*\n"
         f"• {features[0] if len(features) > 0 else 'Smart responses'}\n"
         f"• {features[1] if len(features) > 1 else 'Context memory'}\n"
         f"• {features[2] if len(features) > 2 else 'Voice ready'}\n\n"
-        f"||Tap 'View Details' for secret config||",
+        f"*How to use:*\n"
+        f"• Just send any message to chat!\n"
+        f"• Use `/usebot {bot_id}` to switch to this bot\n"
+        f"• Use `/mybots` to see all your bots\n\n"
+        f"Bot ID: `{bot_id}`",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=reply_markup
     )
@@ -1730,26 +1806,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     await update.message.chat.send_action(ChatAction.TYPING)
     
-    # Use COMPOUND for best responses! (Agentic AI with tools)
-    try:
-        response = await compound_response(
-            user_message=message_text,
-            conversation_history=history
-        )
-    except:
-        # Fallback to regular
-        response = await generate_response(
-            user_message=message_text,
-            conversation_history=history,
-            system_prompt=system_prompt,
-            user_name=get_user_display_name(update)
-        )
+    # Check if user has voice mode enabled
+    voice_mode_enabled = False
+    voice_name = None
+    voice_style = None
     
-    await db.add_conversation(user_id, "assistant", response)
-    await db.increment_stat(user_id, "total_ai_requests")
-    await db.add_xp(user_id, 1)
-    
-    # Check if user has voice mode enabled - reply with voice!
     if voice_engine.is_configured:
         async with db.get_connection() as conn:
             pref = await conn.fetchrow("""
@@ -1757,22 +1818,59 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 WHERE user_id = $1
             """, user_id)
             if pref and pref['voice_name']:
-                # Convert response to voice and send both text and audio
+                voice_mode_enabled = True
                 voice_name = pref['voice_name']
                 voice_style = pref.get('voice_style', 'default')
-                
-                await update.message.chat.send_action(ChatAction.RECORD_VOICE)
-                audio_bytes = await voice_engine.text_to_speech(response, voice=voice_name, style=voice_style)
-                
-                if audio_bytes:
-                    await update.message.reply_voice(io.BytesIO(audio_bytes), caption=f"🎤 Voice reply")
-                
-                # Also send text for readability - use safe_reply_text for long messages
-                await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
-                return
     
-    # Use safe_reply_text to handle messages that exceed Telegram's 4096 char limit
-    await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
+    # Use streaming for a live typing effect!
+    try:
+        # Create the streaming generator
+        response_gen = generate_response_streaming(
+            user_message=message_text,
+            conversation_history=history,
+            system_prompt=system_prompt,
+            user_name=get_user_display_name(update)
+        )
+        
+        # Stream the response with typing effect
+        sent_msg, response = await stream_response_to_message(
+            update.message,
+            response_gen,
+            initial_text="Thinking..."
+        )
+        
+        if not response:
+            response = "I apologize, something went wrong. Please try again."
+            await safe_reply_text(update.message, response)
+            return
+            
+    except Exception as e:
+        # Fallback to non-streaming if streaming fails
+        try:
+            response = await compound_response(
+                user_message=message_text,
+                conversation_history=history
+            )
+        except:
+            response = await generate_response(
+                user_message=message_text,
+                conversation_history=history,
+                system_prompt=system_prompt,
+                user_name=get_user_display_name(update)
+            )
+        await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
+    
+    await db.add_conversation(user_id, "assistant", response)
+    await db.increment_stat(user_id, "total_ai_requests")
+    await db.add_xp(user_id, 1)
+    
+    # If voice mode is enabled, also send voice reply
+    if voice_mode_enabled and voice_name:
+        await update.message.chat.send_action(ChatAction.RECORD_VOICE)
+        audio_bytes = await voice_engine.text_to_speech(response, voice=voice_name, style=voice_style)
+        
+        if audio_bytes:
+            await update.message.reply_voice(io.BytesIO(audio_bytes), caption="🎤 Voice reply")
 
 
 # =====================================================
@@ -2031,13 +2129,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         
         await db.clear_session_state(user_id)
+        await db.set_active_bot(user_id, bot_id)  # Auto-activate the new bot
         await db.add_xp(user_id, 25)
         
+        bot_name = suggestion.get('bot_name', 'Custom Bot')
+        keyboard = [
+            [InlineKeyboardButton("💬 Start Chatting", callback_data="start_chat")],
+            [InlineKeyboardButton("📝 My Bots", callback_data="menu_mybots")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await query.message.reply_text(
-            f"✅ *Bot Created!*\n\n"
-            f"*{suggestion.get('bot_name')}* is ready!\n\n"
-            f"Use: `/usebot {bot_id}`",
-            parse_mode=ParseMode.MARKDOWN
+            f"✅ *{bot_name}* Created Successfully!\n\n"
+            f"Your bot is now active and ready to chat!\n\n"
+            f"*How to use:*\n"
+            f"• Send any message to start chatting\n"
+            f"• Use `/mybots` to manage your bots\n"
+            f"• Use `/usebot {bot_id}` to switch bots\n\n"
+            f"Bot ID: `{bot_id}`",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
         )
 
     elif data == "build_new_suggestion":
