@@ -52,7 +52,17 @@ from telegram.ext import (
 
 import database as db
 from scheduler import WayaScheduler
-from bot_runtime import start_bot_runtime, stop_bot_runtime, bot_runtime
+
+# Optional bot runtime (gracefully degrade if not available)
+try:
+    from bot_runtime import start_bot_runtime, stop_bot_runtime, bot_runtime
+    BOT_RUNTIME_AVAILABLE = True
+except ImportError as e:
+    print(f"Bot runtime not available: {e}")
+    BOT_RUNTIME_AVAILABLE = False
+    bot_runtime = None
+    async def start_bot_runtime(): pass
+    async def stop_bot_runtime(): pass
 from handlers import (
     start_command, help_command, menu_command,
     remind_command, reminders_command, del_reminder_command, snooze_reminder_command,
@@ -239,11 +249,14 @@ async def lifespan(app: fastapi.FastAPI):
         print(f"❌ Telegram error: {e}")
     
     # Start bot runtime engine (autonomous bot execution)
-    try:
-        await start_bot_runtime()
-        print("✅ Bot Runtime Engine started (autonomous bot execution)")
-    except Exception as e:
-        print(f"⚠️ Bot Runtime startup error: {e}")
+    if BOT_RUNTIME_AVAILABLE:
+        try:
+            await start_bot_runtime()
+            print("✅ Bot Runtime Engine started (autonomous bot execution)")
+        except Exception as e:
+            print(f"⚠️ Bot Runtime startup error: {e}")
+    else:
+        print("ℹ️ Bot Runtime not available - user bots will run through main handler")
     
     print("=" * 50)
     print("🤖 Waya is ready and listening!")
@@ -256,8 +269,9 @@ async def lifespan(app: fastapi.FastAPI):
     print("\n🛑 Shutting down Waya...")
     
     # Stop bot runtime first
-    await stop_bot_runtime()
-    print("✅ Bot Runtime Engine stopped")
+    if BOT_RUNTIME_AVAILABLE:
+        await stop_bot_runtime()
+        print("✅ Bot Runtime Engine stopped")
     
     if scheduler:
         await scheduler.stop()
