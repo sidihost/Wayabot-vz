@@ -45,8 +45,8 @@ class Settings(BaseSettings):
         description="Default ElevenLabs voice"
     )
     elevenlabs_model: str = Field(
-        default="eleven_multilingual_v2",
-        description="ElevenLabs model to use"
+        default="eleven_flash_2_0",  # FASTEST - turbo model!
+        description="ElevenLabs turbo model for instant responses"
     )
     
     # Hume AI Emotion Configuration
