@@ -14,4 +14,6 @@ dependencies = [
     "pydantic-settings>=2.7.0",
     "python-dateutil>=2.9.0",
     "pytz>=2024.2",
+    "elevenlabs>=1.15.0",
+    "aiofiles>=24.1.0",
 ]

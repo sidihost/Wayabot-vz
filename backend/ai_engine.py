@@ -126,9 +126,11 @@ async def generate_response(
     system_prompt: str = None,
     user_name: str = None,
     temperature: float = 0.7,
-    max_tokens: int = 1024
+    max_tokens: int = 1024,
+    emotion_context: Dict[str, Any] = None,
+    empathic_mode: bool = False
 ) -> str:
-    """Generate an AI response using Groq."""
+    """Generate an AI response using Groq with optional emotion awareness."""
     client = get_groq_client()
     
     # Build the system prompt with user context
@@ -137,6 +139,30 @@ async def generate_response(
         base_prompt += f"\n\nYou are talking to {user_name}. Address them by name occasionally to be personal."
     
     base_prompt += f"\n\nCurrent date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    
+    # Add emotion context for empathic responses
+    if empathic_mode and emotion_context:
+        dominant = emotion_context.get("dominant_emotion", "neutral")
+        confidence = emotion_context.get("confidence", 0)
+        response_style = emotion_context.get("response_style", "supportive")
+        
+        emotion_guidance = f"""
+
+EMOTIONAL CONTEXT:
+The user appears to be feeling {dominant} (confidence: {confidence:.0%}).
+Respond in a {response_style} manner. Adapt your tone and language accordingly:
+- If they seem stressed or anxious, be calming and reassuring
+- If they seem happy or excited, match their positive energy
+- If they seem sad, be gentle and supportive
+- Always be authentic and genuine in your empathy
+"""
+        base_prompt += emotion_guidance
+        
+        # Adjust temperature based on emotional state
+        if emotion_context.get("intensity") == "negative":
+            temperature = max(0.4, temperature - 0.2)  # More stable for negative emotions
+        elif emotion_context.get("intensity") == "positive":
+            temperature = min(0.9, temperature + 0.1)  # More creative for positive
     
     messages = [{"role": "system", "content": base_prompt}]
     
@@ -161,6 +187,48 @@ async def generate_response(
         return response.choices[0].message.content
     except Exception as e:
         return f"I apologize, but I encountered an error: {str(e)}. Please try again."
+
+
+async def generate_empathic_response(
+    user_message: str,
+    user_name: str,
+    dominant_emotion: str,
+    emotion_intensity: str = "neutral"
+) -> str:
+    """Generate a deeply empathic response based on detected emotions."""
+    client = get_groq_client()
+    
+    empathy_prompts = {
+        "positive": f"""You are responding to {user_name} who is feeling {dominant_emotion}.
+They're in a positive emotional state. Match their energy - be warm, enthusiastic, and celebratory.
+Share in their joy genuinely. Be encouraging and uplifting.""",
+        
+        "negative": f"""You are responding to {user_name} who is feeling {dominant_emotion}.
+They may be going through a difficult time. Be gentle, compassionate, and supportive.
+Acknowledge their feelings without trying to immediately fix things. 
+Show genuine empathy and let them know it's okay to feel this way.
+Offer comfort and support, not unsolicited advice.""",
+        
+        "neutral": f"""You are responding to {user_name} who seems to be in a {dominant_emotion} state.
+Be warm, helpful, and attentive. Adapt your tone based on what they need."""
+    }
+    
+    system_prompt = empathy_prompts.get(emotion_intensity, empathy_prompts["neutral"])
+    system_prompt += "\n\nRespond naturally and authentically. Don't mention that you detected their emotions unless it feels natural."
+    
+    try:
+        response = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7 if emotion_intensity == "neutral" else (0.5 if emotion_intensity == "negative" else 0.8),
+            max_tokens=1024
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"I'm here for you. {str(e)}"
 
 
 async def generate_bot_suggestion(user_request: str) -> Dict[str, Any]:

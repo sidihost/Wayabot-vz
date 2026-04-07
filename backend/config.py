@@ -34,6 +34,28 @@ class Settings(BaseSettings):
         description="Maximum tokens for AI responses"
     )
     
+    # ElevenLabs Voice AI Configuration
+    elevenlabs_api_key: Optional[str] = Field(
+        default=None,
+        alias="ELEVENLABS_API_KEY",
+        description="ElevenLabs API key for text-to-speech"
+    )
+    elevenlabs_default_voice: str = Field(
+        default="Rachel",
+        description="Default ElevenLabs voice"
+    )
+    elevenlabs_model: str = Field(
+        default="eleven_multilingual_v2",
+        description="ElevenLabs model to use"
+    )
+    
+    # Hume AI Emotion Configuration
+    hume_api_key: Optional[str] = Field(
+        default=None,
+        alias="HUME_API_KEY",
+        description="Hume AI API key for emotion detection"
+    )
+    
     # Database Configuration
     database_url: str = Field(
         ...,
@@ -59,6 +81,8 @@ class Settings(BaseSettings):
     enable_ai_suggestions: bool = Field(default=True)
     enable_custom_bots: bool = Field(default=True)
     enable_analytics: bool = Field(default=True)
+    enable_voice_ai: bool = Field(default=True, description="Enable ElevenLabs voice features")
+    enable_emotion_ai: bool = Field(default=True, description="Enable Hume AI emotion features")
     
     # Rate Limiting
     rate_limit_messages: int = Field(default=30, description="Messages per minute")

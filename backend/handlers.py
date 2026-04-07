@@ -4,6 +4,7 @@ All Telegram bot command and message handlers.
 """
 
 import json
+import io
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
@@ -16,6 +17,8 @@ from ai_engine import (
     parse_reminder_request, parse_task_request, summarize_text, translate_text,
     generate_quiz_question, get_smart_suggestions, get_bot_system_prompt, WAYA_SYSTEM_PROMPT
 )
+from voice_engine import voice_engine, voice_preferences, VoiceEngine
+from emotion_engine import emotion_engine, EmotionEngine
 
 
 def get_user_display_name(update: Update) -> str:
@@ -178,6 +181,20 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 *📊 Polls:*
 `/poll <question> | <opt1> | <opt2>...`
 `/pollresults <id>` - View results
+
+*🎙 Voice AI (ElevenLabs):*
+`/voice <text>` - Text to speech
+`/voices` - List all voices
+`/setvoice <name>` - Set default voice
+`/voicestyle <style>` - Set voice style
+`/speakthis` - Reply to convert to voice
+
+*💚 Emotion AI (Hume):*
+`/mood <text>` - Analyze emotions
+`/emotions` - Your emotional insights
+`/empathy` - Toggle empathic mode
+`/wellbeing` - Wellbeing check
+`/analyzeemotion` - Analyze voice emotions
 
 *📈 Other:*
 `/stats` - Usage statistics
@@ -1410,6 +1427,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     personality = await db.get_active_personality(user_id)
     system_prompt = personality.get('system_prompt', WAYA_SYSTEM_PROMPT) if personality else WAYA_SYSTEM_PROMPT
     
+    # Check user's empathic mode preference
+    empathic_mode = False
+    emotion_context = None
+    
+    async with db.get_connection() as conn:
+        pref_row = await conn.fetchrow("""
+            SELECT enable_empathic_responses FROM user_emotion_preferences
+            WHERE user_id = $1
+        """, user_id)
+        empathic_mode = pref_row['enable_empathic_responses'] if pref_row else True
+    
+    # Analyze emotions if empathic mode is on
+    if empathic_mode and emotion_engine.is_configured:
+        emotion_context = await emotion_engine.analyze_text_emotion(message_text)
+        if emotion_context:
+            # Store emotional state
+            async with db.get_connection() as conn:
+                await emotion_engine.update_user_emotional_state(conn, user_id, emotion_context)
+    
     # Regular AI conversation
     history = await db.get_conversation_history(user_id, limit=15)
     await db.add_conversation(user_id, "user", message_text)
@@ -1420,7 +1456,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         user_message=message_text,
         conversation_history=history,
         system_prompt=system_prompt,
-        user_name=get_user_display_name(update)
+        user_name=get_user_display_name(update),
+        emotion_context=emotion_context,
+        empathic_mode=empathic_mode
     )
     
     await db.add_conversation(user_id, "assistant", response)
@@ -1601,6 +1639,478 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         minutes = int(parts[1])
         await db.snooze_reminder(reminder_id, user_id, minutes)
         await query.message.edit_text(f"⏰ Snoozed for {minutes} minutes!")
+
+
+# =====================================================
+# VOICE AI HANDLERS (ELEVENLABS)
+# =====================================================
+
+async def voice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Generate voice from text using ElevenLabs."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    await track_command(user_id, "voice")
+    
+    if not voice_engine.is_configured:
+        await update.message.reply_text(
+            "Voice AI is currently not configured.\n\n"
+            "The bot admin needs to set the ELEVENLABS_API_KEY."
+        )
+        return
+    
+    text = ' '.join(context.args) if context.args else None
+    
+    if not text:
+        # Show voice options
+        voices_text = voice_engine.get_available_voices_formatted()
+        styles_text = voice_engine.get_voice_styles_formatted()
+        
+        await update.message.reply_text(
+            f"🎙 *Voice Generation*\n\n"
+            f"Generate speech from text using AI voices.\n\n"
+            f"*Usage:* `/voice <text to speak>`\n"
+            f"*With voice:* `/voice Rachel: Hello there!`\n"
+            f"*With style:* `/voice Rachel dramatic: This is dramatic!`\n\n"
+            f"*Quick Commands:*\n"
+            f"• `/voices` - List all voices\n"
+            f"• `/setvoice Rachel` - Set default voice\n"
+            f"• `/voicestyle expressive` - Set style\n\n"
+            f"{voices_text[:1500]}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    await update.message.chat.send_action(ChatAction.RECORD_VOICE)
+    
+    # Parse voice and style from text
+    voice = None
+    style = "default"
+    
+    # Check for "Voice: text" format
+    if ':' in text:
+        parts = text.split(':', 1)
+        voice_part = parts[0].strip()
+        text = parts[1].strip()
+        
+        # Check for "Voice Style: text" format
+        voice_parts = voice_part.split()
+        if len(voice_parts) >= 2 and voice_parts[-1].lower() in VoiceEngine.VOICE_STYLES:
+            style = voice_parts[-1].lower()
+            voice = ' '.join(voice_parts[:-1])
+        else:
+            voice = voice_part
+    
+    # Get user preference if no voice specified
+    if not voice:
+        async with db.get_connection() as conn:
+            prefs = await voice_preferences.get_user_preference(conn, user_id)
+            voice = prefs.get("voice", "Rachel")
+            if style == "default":
+                style = prefs.get("style", "default")
+    
+    # Generate voice
+    audio_bytes = await voice_engine.text_to_speech(text[:5000], voice=voice, style=style)
+    
+    if audio_bytes:
+        # Send as voice message
+        audio_file = io.BytesIO(audio_bytes)
+        audio_file.name = "voice.mp3"
+        
+        await update.message.reply_voice(
+            voice=audio_file,
+            caption=f"🎙 Generated with *{voice}* ({style})",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        # Track usage
+        async with db.get_connection() as conn:
+            await conn.execute("""
+                INSERT INTO voice_generation_history (user_id, voice_name, voice_style, text_length, characters_used)
+                VALUES ($1, $2, $3, $4, $5)
+            """, user_id, voice, style, len(text), len(text))
+        
+        await db.add_xp(user_id, 5)
+    else:
+        await update.message.reply_text(
+            "❌ Failed to generate voice. Please try again.\n"
+            "Make sure your text is not too long (max 5000 characters)."
+        )
+
+
+async def voices_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List available voices."""
+    await ensure_user(update)
+    
+    voices_list = []
+    for name, info in VoiceEngine.AVAILABLE_VOICES.items():
+        voices_list.append(f"• *{name}*: {info['description']}\n  _{info['use_case']}_")
+    
+    await update.message.reply_text(
+        "🎙 *Available Voices*\n\n" + "\n\n".join(voices_list[:10]) + 
+        "\n\n*Usage:* `/voice VoiceName: Your text here`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def setvoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Set user's default voice."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: `/setvoice <voice_name>`\n\n"
+            "Example: `/setvoice Rachel`\n"
+            "Use `/voices` to see available voices.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    voice_name = ' '.join(context.args)
+    
+    # Validate voice name
+    if voice_name not in VoiceEngine.AVAILABLE_VOICES:
+        await update.message.reply_text(
+            f"Unknown voice: {voice_name}\n\n"
+            "Use `/voices` to see available voices."
+        )
+        return
+    
+    async with db.get_connection() as conn:
+        await conn.execute("""
+            INSERT INTO user_voice_preferences (user_id, voice_name, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET voice_name = $2, updated_at = NOW()
+        """, user_id, voice_name)
+    
+    voice_info = VoiceEngine.AVAILABLE_VOICES[voice_name]
+    await update.message.reply_text(
+        f"✅ Default voice set to *{voice_name}*\n\n"
+        f"_{voice_info['description']}_",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def voicestyle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Set user's default voice style."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    
+    styles = list(VoiceEngine.VOICE_STYLES.keys())
+    
+    if not context.args:
+        style_list = "\n".join([f"• *{s}*" for s in styles])
+        await update.message.reply_text(
+            f"🎨 *Voice Styles*\n\n{style_list}\n\n"
+            f"Usage: `/voicestyle <style>`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    style = context.args[0].lower()
+    
+    if style not in styles:
+        await update.message.reply_text(f"Unknown style. Available: {', '.join(styles)}")
+        return
+    
+    async with db.get_connection() as conn:
+        await conn.execute("""
+            INSERT INTO user_voice_preferences (user_id, voice_style, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET voice_style = $2, updated_at = NOW()
+        """, user_id, style)
+    
+    await update.message.reply_text(f"✅ Voice style set to *{style}*", parse_mode=ParseMode.MARKDOWN)
+
+
+async def speakthis_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Convert replied message to speech."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    
+    if not update.message.reply_to_message:
+        await update.message.reply_text("Reply to a message with `/speakthis` to convert it to voice.")
+        return
+    
+    if not voice_engine.is_configured:
+        await update.message.reply_text("Voice AI is not configured.")
+        return
+    
+    text = update.message.reply_to_message.text or update.message.reply_to_message.caption
+    if not text:
+        await update.message.reply_text("The replied message has no text content.")
+        return
+    
+    await update.message.chat.send_action(ChatAction.RECORD_VOICE)
+    
+    # Get user preferences
+    async with db.get_connection() as conn:
+        prefs = await voice_preferences.get_user_preference(conn, user_id)
+    
+    audio_bytes = await voice_engine.text_to_speech(
+        text[:5000],
+        voice=prefs.get("voice", "Rachel"),
+        style=prefs.get("style", "default")
+    )
+    
+    if audio_bytes:
+        audio_file = io.BytesIO(audio_bytes)
+        audio_file.name = "voice.mp3"
+        await update.message.reply_voice(voice=audio_file)
+        await db.add_xp(user_id, 3)
+    else:
+        await update.message.reply_text("Failed to generate voice. Please try again.")
+
+
+# =====================================================
+# EMOTION AI HANDLERS (HUME)
+# =====================================================
+
+async def mood_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Analyze current mood from recent messages or provided text."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    await track_command(user_id, "mood")
+    
+    text = ' '.join(context.args) if context.args else None
+    
+    if not text:
+        # Analyze from recent conversation
+        async with db.get_connection() as conn:
+            messages = await conn.fetch("""
+                SELECT content FROM conversations
+                WHERE user_id = $1 AND role = 'user'
+                ORDER BY created_at DESC LIMIT 5
+            """, user_id)
+        
+        if not messages:
+            await update.message.reply_text(
+                "I don't have enough conversation history to analyze your mood.\n\n"
+                "Try: `/mood I'm feeling excited about my new project!`"
+            )
+            return
+        
+        text = " ".join([m['content'] for m in messages])
+    
+    await update.message.chat.send_action(ChatAction.TYPING)
+    
+    # Analyze emotions
+    emotions = await emotion_engine.analyze_text_emotion(text)
+    
+    if not emotions:
+        await update.message.reply_text("Could not analyze emotions. Please try again.")
+        return
+    
+    dominant = emotions.get("dominant_emotion", "neutral")
+    confidence = emotions.get("confidence", 0)
+    top_emotions = emotions.get("top_emotions", {})
+    
+    # Get emotion info
+    emotion_info = EmotionEngine.EMOTION_CATEGORIES.get(dominant, {})
+    intensity = emotion_info.get("intensity", "neutral")
+    
+    # Build response
+    intensity_emoji = {"positive": "😊", "negative": "😔", "neutral": "😐"}.get(intensity, "🤔")
+    
+    top_emotions_text = "\n".join([
+        f"• {e.replace('_', ' ').title()}: {s:.0%}"
+        for e, s in list(top_emotions.items())[:5]
+    ])
+    
+    response_style = emotions.get("response_style", "supportive")
+    
+    await update.message.reply_text(
+        f"{intensity_emoji} *Emotional Analysis*\n\n"
+        f"*Dominant:* {dominant.replace('_', ' ').title()} ({confidence:.0%})\n"
+        f"*Intensity:* {intensity.title()}\n\n"
+        f"*Detected Emotions:*\n{top_emotions_text}\n\n"
+        f"_I'll adjust my responses to be more {response_style}_",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    # Store emotional state
+    async with db.get_connection() as conn:
+        await emotion_engine.update_user_emotional_state(conn, user_id, emotions)
+    
+    await db.add_xp(user_id, 3)
+
+
+async def emotions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """View emotional history and insights."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    await track_command(user_id, "emotions")
+    
+    async with db.get_connection() as conn:
+        # Get recent history
+        history = await emotion_engine.get_user_emotional_history(conn, user_id, limit=10)
+        
+        # Get insights
+        insights = await emotion_engine.get_emotional_insights(conn, user_id, days=7)
+    
+    if not history:
+        await update.message.reply_text(
+            "📊 *Emotional Insights*\n\n"
+            "No emotional data yet. Start chatting and I'll learn about your emotional patterns!\n\n"
+            "Use `/mood <text>` to analyze specific text.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    # Format history
+    history_text = "\n".join([
+        f"• {h['emotion'].replace('_', ' ').title()} ({h['confidence']:.0%}) - {h['time'].strftime('%m/%d %H:%M')}"
+        for h in history[:5]
+    ])
+    
+    # Format insights
+    wellbeing = insights.get("wellbeing_score", 50)
+    wellbeing_bar = "█" * (wellbeing // 10) + "░" * (10 - wellbeing // 10)
+    
+    sentiment = insights.get("sentiment_breakdown", {})
+    
+    await update.message.reply_text(
+        f"📊 *Emotional Insights (Last 7 Days)*\n\n"
+        f"*Wellbeing Score:* {wellbeing}/100\n"
+        f"[{wellbeing_bar}]\n\n"
+        f"*Sentiment Breakdown:*\n"
+        f"😊 Positive: {sentiment.get('positive', '0%')}\n"
+        f"😐 Neutral: {sentiment.get('neutral', '0%')}\n"
+        f"😔 Negative: {sentiment.get('negative', '0%')}\n\n"
+        f"*Most Common:* {insights.get('most_common_emotion', 'N/A').replace('_', ' ').title()}\n"
+        f"*Interactions:* {insights.get('total_interactions', 0)}\n\n"
+        f"*Recent Emotions:*\n{history_text}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def empathy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Toggle empathic response mode."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    
+    async with db.get_connection() as conn:
+        # Get current setting
+        row = await conn.fetchrow("""
+            SELECT enable_empathic_responses FROM user_emotion_preferences
+            WHERE user_id = $1
+        """, user_id)
+        
+        current = row['enable_empathic_responses'] if row else True
+        new_value = not current
+        
+        await conn.execute("""
+            INSERT INTO user_emotion_preferences (user_id, enable_empathic_responses, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET enable_empathic_responses = $2, updated_at = NOW()
+        """, user_id, new_value)
+    
+    status = "enabled" if new_value else "disabled"
+    emoji = "💚" if new_value else "⚪"
+    
+    await update.message.reply_text(
+        f"{emoji} *Empathic Responses {status.title()}*\n\n"
+        f"{'I will now adapt my tone based on your emotions.' if new_value else 'I will respond in a neutral, consistent tone.'}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def wellbeing_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Get a wellbeing check and supportive message."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    name = get_user_display_name(update)
+    await track_command(user_id, "wellbeing")
+    
+    await update.message.chat.send_action(ChatAction.TYPING)
+    
+    async with db.get_connection() as conn:
+        insights = await emotion_engine.get_emotional_insights(conn, user_id, days=7)
+    
+    wellbeing = insights.get("wellbeing_score", 50)
+    most_common = insights.get("most_common_emotion", "neutral")
+    
+    # Generate supportive message based on wellbeing
+    if wellbeing >= 70:
+        message = (
+            f"🌟 *Wellbeing Check for {name}*\n\n"
+            f"Your emotional wellbeing looks great! You've been predominantly "
+            f"feeling {most_common.replace('_', ' ')} lately.\n\n"
+            f"*Score: {wellbeing}/100* ✨\n\n"
+            f"Keep up the positive energy! Remember to:\n"
+            f"• Celebrate your wins\n"
+            f"• Share positivity with others\n"
+            f"• Maintain healthy habits"
+        )
+    elif wellbeing >= 40:
+        message = (
+            f"💙 *Wellbeing Check for {name}*\n\n"
+            f"You're doing okay, with a mix of emotions. "
+            f"I've noticed you've been feeling {most_common.replace('_', ' ')} sometimes.\n\n"
+            f"*Score: {wellbeing}/100*\n\n"
+            f"Some suggestions:\n"
+            f"• Take breaks when needed\n"
+            f"• Reach out to friends\n"
+            f"• Practice self-compassion"
+        )
+    else:
+        message = (
+            f"💚 *Wellbeing Check for {name}*\n\n"
+            f"It seems like you've been going through some challenging emotions. "
+            f"I'm here to support you.\n\n"
+            f"*Score: {wellbeing}/100*\n\n"
+            f"Remember:\n"
+            f"• It's okay to not be okay\n"
+            f"• Small steps matter\n"
+            f"• You're not alone\n\n"
+            f"_Use `/chat` to talk about anything on your mind._"
+        )
+    
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+
+async def analyze_voice_emotion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Analyze emotions from voice message."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    
+    if not update.message.reply_to_message or not update.message.reply_to_message.voice:
+        await update.message.reply_text(
+            "Reply to a voice message with `/analyzeemotion` to detect emotions from speech."
+        )
+        return
+    
+    if not emotion_engine.is_configured:
+        await update.message.reply_text("Emotion AI voice analysis requires Hume AI API key.")
+        return
+    
+    await update.message.chat.send_action(ChatAction.TYPING)
+    
+    # Download voice message
+    voice_file = await update.message.reply_to_message.voice.get_file()
+    voice_bytes = await voice_file.download_as_bytearray()
+    
+    # Analyze
+    emotions = await emotion_engine.analyze_voice_emotion(bytes(voice_bytes))
+    
+    if emotions:
+        dominant = emotions.get("dominant_emotion", "unknown")
+        confidence = emotions.get("confidence", 0)
+        top_emotions = emotions.get("top_emotions", {})
+        
+        top_text = "\n".join([
+            f"• {e.replace('_', ' ').title()}: {s:.0%}"
+            for e, s in list(top_emotions.items())[:5]
+        ])
+        
+        await update.message.reply_text(
+            f"🎙 *Voice Emotion Analysis*\n\n"
+            f"*Detected:* {dominant.replace('_', ' ').title()} ({confidence:.0%})\n\n"
+            f"*Emotions:*\n{top_text}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    else:
+        await update.message.reply_text("Could not analyze voice emotions. Please try a clearer recording.")
 
 
 # =====================================================

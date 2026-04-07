@@ -520,6 +520,97 @@ async def _init_schema():
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
             CREATE INDEX IF NOT EXISTS idx_notification_user ON notifications(user_id, is_read, created_at DESC);
+            
+            -- =====================================================
+            -- VOICE AI (ELEVENLABS)
+            -- =====================================================
+            
+            CREATE TABLE IF NOT EXISTS user_voice_preferences (
+                user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                voice_name VARCHAR(100) DEFAULT 'Rachel',
+                voice_style VARCHAR(50) DEFAULT 'default',
+                language VARCHAR(50) DEFAULT 'English',
+                output_format VARCHAR(50) DEFAULT 'mp3_44100_128',
+                auto_voice_replies BOOLEAN DEFAULT FALSE,
+                custom_voice_id VARCHAR(100),
+                custom_voice_name VARCHAR(100),
+                usage_count INT DEFAULT 0,
+                last_used_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            
+            -- Voice generation history
+            CREATE TABLE IF NOT EXISTS voice_generation_history (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                voice_name VARCHAR(100) NOT NULL,
+                voice_style VARCHAR(50),
+                text_length INT NOT NULL,
+                audio_duration_seconds DECIMAL(10,2),
+                characters_used INT NOT NULL,
+                generation_time_ms INT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_voice_history_user ON voice_generation_history(user_id, created_at DESC);
+            
+            -- Cloned voices
+            CREATE TABLE IF NOT EXISTS cloned_voices (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                elevenlabs_voice_id VARCHAR(100) NOT NULL UNIQUE,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                sample_count INT DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_cloned_voices_user ON cloned_voices(user_id);
+            
+            -- =====================================================
+            -- EMOTION AI (HUME)
+            -- =====================================================
+            
+            CREATE TABLE IF NOT EXISTS user_emotional_history (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                dominant_emotion VARCHAR(100),
+                confidence DECIMAL(5,4),
+                top_emotions JSONB DEFAULT '{}'::jsonb,
+                context TEXT,
+                analyzed_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_emotion_history_user ON user_emotional_history(user_id, analyzed_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_emotion_history_emotion ON user_emotional_history(dominant_emotion);
+            
+            -- Emotion preferences (response style adjustments)
+            CREATE TABLE IF NOT EXISTS user_emotion_preferences (
+                user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                enable_emotion_detection BOOLEAN DEFAULT TRUE,
+                enable_empathic_responses BOOLEAN DEFAULT TRUE,
+                emotion_sensitivity VARCHAR(20) DEFAULT 'normal' CHECK (emotion_sensitivity IN ('low', 'normal', 'high')),
+                preferred_response_tone VARCHAR(50) DEFAULT 'adaptive',
+                share_emotional_insights BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            
+            -- Emotional wellbeing tracking (daily summaries)
+            CREATE TABLE IF NOT EXISTS emotional_daily_summary (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                date DATE NOT NULL,
+                dominant_emotion VARCHAR(100),
+                positive_ratio DECIMAL(5,4),
+                negative_ratio DECIMAL(5,4),
+                neutral_ratio DECIMAL(5,4),
+                wellbeing_score INT,
+                interaction_count INT DEFAULT 0,
+                emotion_breakdown JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(user_id, date)
+            );
+            CREATE INDEX IF NOT EXISTS idx_daily_emotion_user ON emotional_daily_summary(user_id, date DESC);
         ''')
         
         # Insert default bot templates

@@ -13,10 +13,22 @@ Features:
 - Multi-language translation
 - Text summarization
 - Gamification with XP and streaks
-- And much more!
+
+Voice AI (ElevenLabs):
+- Text-to-speech with 12+ premium voices
+- Multiple voice styles (expressive, dramatic, etc.)
+- Voice cloning capabilities
+- Convert any message to audio
+
+Emotion AI (Hume):
+- Real-time emotion detection from text
+- Voice emotion analysis
+- Empathic response mode
+- Emotional wellbeing insights
+- Mood tracking and history
 
 Author: Waya Team
-Version: 1.0.0
+Version: 2.0.0
 """
 
 import os
@@ -50,6 +62,10 @@ from handlers import (
     poll_command, poll_results_command,
     stats_command, settings_command, suggest_command, feedback_command,
     profile_command, leaderboard_command,
+    # Voice AI (ElevenLabs)
+    voice_command, voices_command, setvoice_command, voicestyle_command, speakthis_command,
+    # Emotion AI (Hume)
+    mood_command, emotions_command, empathy_command, wellbeing_command, analyze_voice_emotion,
     handle_message, handle_callback, error_handler
 )
 
@@ -122,6 +138,20 @@ async def setup_telegram_app() -> Application:
         # Polls
         ("poll", poll_command),
         ("pollresults", poll_results_command),
+        
+        # Voice AI (ElevenLabs)
+        ("voice", voice_command),
+        ("voices", voices_command),
+        ("setvoice", setvoice_command),
+        ("voicestyle", voicestyle_command),
+        ("speakthis", speakthis_command),
+        
+        # Emotion AI (Hume)
+        ("mood", mood_command),
+        ("emotions", emotions_command),
+        ("empathy", empathy_command),
+        ("wellbeing", wellbeing_command),
+        ("analyzeemotion", analyze_voice_emotion),
         
         # Other
         ("stats", stats_command),
