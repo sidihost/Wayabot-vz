@@ -296,11 +296,54 @@ async def track_command(user_id: int, command: str):
 # =====================================================
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the /start command."""
+    """Handle the /start command with deep link support for shared bots."""
     user_data = await ensure_user(update)
     await track_command(update.effective_user.id, "start")
-    
+    user_id = update.effective_user.id
     name = get_user_display_name(update)
+    
+    # Check for deep link parameter (e.g., /start bot_123)
+    if context.args and len(context.args) > 0:
+        param = context.args[0]
+        
+        # Handle shared bot link: bot_<id>
+        if param.startswith("bot_"):
+            try:
+                bot_id = int(param.replace("bot_", ""))
+                bot_info = await db.get_bot(bot_id)
+                
+                if bot_info:
+                    # Activate this bot for the user
+                    await db.set_active_bot(user_id, bot_id)
+                    
+                    bot_name = bot_info.get('name', 'AI Bot')
+                    greeting = bot_info.get('welcome_message', f"Hey! I'm {bot_name}. How can I help you?")
+                    desc = bot_info.get('description', '')
+                    
+                    keyboard = [
+                        [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
+                        [InlineKeyboardButton("My Bots", callback_data="menu_mybots")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    # Clean greeting for Telegram
+                    clean_greeting = clean_markdown_for_telegram(greeting)
+                    
+                    await update.message.reply_text(
+                        f"*{bot_name}*\n\n"
+                        f"{desc}\n\n"
+                        f"_{clean_greeting}_\n\n"
+                        f"Send a message to start chatting!",
+                        parse_mode=ParseMode.MARKDOWN,
+                        reply_markup=reply_markup
+                    )
+                    return
+                else:
+                    await update.message.reply_text("This bot is no longer available.")
+                    # Continue to normal start flow
+            except (ValueError, Exception):
+                pass  # Invalid bot ID, continue to normal start
+    
     is_new = user_data.get("is_new", False)
     
     if is_new:
@@ -1068,33 +1111,50 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await db.set_active_bot(user_id, bot_id)
     await db.add_xp(user_id, 30)
     
-    # PREMIUM SUCCESS with buttons!
+    # Get bot username for shareable link
+    try:
+        bot_info = await context.bot.get_me()
+        bot_username = bot_info.username
+    except:
+        bot_username = "WayaBotBuilder_bot"  # Fallback
+    
+    # Create shareable deep link
+    share_link = f"https://t.me/{bot_username}?start=bot_{bot_id}"
+    
+    # SUCCESS with shareable link!
     bot_name = config.get('bot_name', 'Bot')
     desc = config.get('bot_description', '')[:100]
     features = config.get('features', [])[:3]
+    greeting = config.get('greeting_message', f"Hey! I'm {bot_name}. How can I help?")
     
     keyboard = [
-        [InlineKeyboardButton("💬 Start Chatting", callback_data="start_chat")],
-        [InlineKeyboardButton("🎤 Enable Voice", callback_data="add_voice"),
-         InlineKeyboardButton("📋 Details", callback_data=f"view_bot_{bot_id}")],
-        [InlineKeyboardButton("📝 My Bots", callback_data="menu_mybots")]
+        [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
+        [InlineKeyboardButton("Share Bot", url=share_link)],
+        [InlineKeyboardButton("My Bots", callback_data="menu_mybots")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await loading_msg.edit_text(
-        f"✅ *{bot_name}* is ready!\n\n"
-        f"*Description:* {desc}\n\n"
+        f"Your AI Bot is Ready!\n\n"
+        f"*{bot_name}*\n"
+        f"{desc}\n\n"
         f"*Features:*\n"
-        f"• {features[0] if len(features) > 0 else 'Smart responses'}\n"
-        f"• {features[1] if len(features) > 1 else 'Context memory'}\n"
-        f"• {features[2] if len(features) > 2 else 'Voice ready'}\n\n"
-        f"*How to use:*\n"
-        f"• Just send any message to chat!\n"
-        f"• Use `/usebot {bot_id}` to switch to this bot\n"
-        f"• Use `/mybots` to see all your bots\n\n"
-        f"Bot ID: `{bot_id}`",
+        f"- {features[0] if len(features) > 0 else 'Smart responses'}\n"
+        f"- {features[1] if len(features) > 1 else 'Context memory'}\n"
+        f"- {features[2] if len(features) > 2 else 'Instant replies'}\n\n"
+        f"*Share your bot:*\n"
+        f"`{share_link}`\n\n"
+        f"Just send a message to start chatting with your new AI!",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=reply_markup
+    )
+    
+    # Send the greeting as first message from the bot
+    await asyncio.sleep(0.5)
+    clean_greeting = clean_markdown_for_telegram(greeting)
+    await update.message.reply_text(
+        f"*{bot_name}:* {clean_greeting}",
+        parse_mode=ParseMode.MARKDOWN
     )
 
 
@@ -1741,13 +1801,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await db.set_active_bot(user_id, bot_id)
         await db.add_xp(user_id, 30)
         
+        # Get bot username for shareable link
+        try:
+            bot_info_tg = await context.bot.get_me()
+            bot_username = bot_info_tg.username
+        except:
+            bot_username = "WayaBotBuilder_bot"
+        
+        share_link = f"https://t.me/{bot_username}?start=bot_{bot_id}"
+        bot_name = config.get('bot_name', 'My Bot')
+        greeting = config.get('greeting_message', f"Hey! I'm {bot_name}.")
+        
+        keyboard = [
+            [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
+            [InlineKeyboardButton("Share Bot", url=share_link)],
+            [InlineKeyboardButton("My Bots", callback_data="menu_mybots")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await update.message.reply_text(
-            f"✅ *{config.get('bot_name')} Created!*\n\n"
-            f"Your custom bot is ready and active!\n\n"
-            f"What it does: {config.get('bot_description', 'Helps you')[:80]}\n\n"
-            f"Start chatting! 💬",
-            parse_mode=ParseMode.MARKDOWN
+            f"Your AI Bot is Ready!\n\n"
+            f"*{bot_name}*\n"
+            f"{config.get('bot_description', '')[:100]}\n\n"
+            f"*Share your bot:*\n"
+            f"`{share_link}`\n\n"
+            f"Send a message to start chatting!",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
         )
+        
+        # Send greeting from the bot
+        clean_greeting = clean_markdown_for_telegram(greeting)
+        await update.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
         return
     
     # Check for menu button presses
@@ -2162,24 +2247,38 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await db.set_active_bot(user_id, bot_id)  # Auto-activate the new bot
         await db.add_xp(user_id, 25)
         
+        # Get bot username for shareable link
+        try:
+            bot_info_tg = await context.bot.get_me()
+            bot_username = bot_info_tg.username
+        except:
+            bot_username = "WayaBotBuilder_bot"
+        
+        share_link = f"https://t.me/{bot_username}?start=bot_{bot_id}"
+        
         bot_name = suggestion.get('bot_name', 'Custom Bot')
+        greeting = suggestion.get('greeting_message', f"Hey! I'm {bot_name}.")
+        
         keyboard = [
-            [InlineKeyboardButton("💬 Start Chatting", callback_data="start_chat")],
-            [InlineKeyboardButton("📝 My Bots", callback_data="menu_mybots")]
+            [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
+            [InlineKeyboardButton("Share Bot", url=share_link)],
+            [InlineKeyboardButton("My Bots", callback_data="menu_mybots")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.message.reply_text(
-            f"✅ *{bot_name}* Created Successfully!\n\n"
-            f"Your bot is now active and ready to chat!\n\n"
-            f"*How to use:*\n"
-            f"• Send any message to start chatting\n"
-            f"• Use `/mybots` to manage your bots\n"
-            f"• Use `/usebot {bot_id}` to switch bots\n\n"
-            f"Bot ID: `{bot_id}`",
+            f"Your AI Bot is Ready!\n\n"
+            f"*{bot_name}*\n\n"
+            f"*Share your bot:*\n"
+            f"`{share_link}`\n\n"
+            f"Send a message to start chatting!",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
         )
+        
+        # Send greeting
+        clean_greeting = clean_markdown_for_telegram(greeting)
+        await query.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
 
     elif data == "build_new_suggestion":
         # Get a new suggestion
@@ -2236,24 +2335,38 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await db.set_active_bot(user_id, bot_id)  # Auto-activate
             await db.add_xp(user_id, 20)
             
+            # Get bot username for shareable link
+            try:
+                bot_info_tg = await context.bot.get_me()
+                bot_username = bot_info_tg.username
+            except:
+                bot_username = "WayaBotBuilder_bot"
+            
+            share_link = f"https://t.me/{bot_username}?start=bot_{bot_id}"
+            
             bot_name = template.get('name', 'Custom Bot')
+            greeting = template.get('welcome_message', f"Hello! I'm {bot_name}.")
+            
             keyboard = [
-                [InlineKeyboardButton("💬 Start Chatting", callback_data="start_chat")],
-                [InlineKeyboardButton("📝 My Bots", callback_data="menu_mybots")]
+                [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
+                [InlineKeyboardButton("Share Bot", url=share_link)],
+                [InlineKeyboardButton("My Bots", callback_data="menu_mybots")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.message.reply_text(
-                f"✅ *{bot_name}* Created Successfully!\n\n"
-                f"Your bot is now active and ready to chat!\n\n"
-                f"*How to use:*\n"
-                f"• Send any message to start chatting\n"
-                f"• Use `/mybots` to manage your bots\n"
-                f"• Use `/usebot {bot_id}` to switch bots\n\n"
-                f"Bot ID: `{bot_id}`",
+                f"Your AI Bot is Ready!\n\n"
+                f"*{bot_name}*\n\n"
+                f"*Share your bot:*\n"
+                f"`{share_link}`\n\n"
+                f"Send a message to start chatting!",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=reply_markup
             )
+            
+            # Send greeting
+            clean_greeting = clean_markdown_for_telegram(greeting)
+            await query.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
     
     elif data == "show_all_templates":
         templates = await db.get_bot_templates()

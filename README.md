@@ -5,13 +5,31 @@ An intelligent Telegram bot that helps users create custom bots, set reminders, 
 ## Features
 
 - **AI Chat with Streaming** - Real-time typing effect as AI responds
-- **Bot Builder** - Create custom Telegram bots just by describing them
+- **Bot Builder** - Create custom AI bots just by describing them
+  - Instant creation: `/build a fitness coach bot`
+  - Get a shareable link: `t.me/YourBot?start=bot_123`
+  - Users can try your bot instantly
 - **Voice Messages** - Transcription with Groq Whisper + text-to-speech with ElevenLabs
 - **Smart Reminders** - Natural language ("remind me to call mom in 2 hours")
 - **Notes & Tasks** - Quick note-taking and task management
 - **AI Personalities** - Create custom AI personalities
 - **Emotion AI** - Empathic responses based on your mood
 - **Gamification** - XP, levels, streaks, and achievements
+
+## Bot Building Examples
+
+```
+/build a coffee shop assistant bot
+/build a fitness coach that motivates users
+/build a coding tutor for Python
+/build a customer support bot for my store
+/build a quiz bot about science
+```
+
+After creation, you get:
+- A shareable link anyone can use
+- Your bot is immediately active
+- The AI greets users automatically
 
 ---
 
@@ -60,13 +78,11 @@ cd Wayabot-vz
 cp .env.example .env
 nano .env   # Add your API keys
 
-# Start everything
+# Start everything (webhook auto-configures if BOT_DOMAIN is set!)
 docker compose up -d
 
-# Set webhook (replace YOUR_IP with your droplet IP)
-curl -X POST http://localhost:8000/set-webhook \
-  -H "Content-Type: application/json" \
-  -d '{"url": "http://YOUR_IP:8000"}'
+# Check logs to verify webhook is set
+docker compose logs -f wayabot
 ```
 
 ---

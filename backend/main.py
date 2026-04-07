@@ -209,6 +209,26 @@ async def lifespan(app: fastapi.FastAPI):
         await scheduler.start()
         print("✅ Reminder scheduler started")
         
+        # Auto-setup webhook if BOT_DOMAIN is set
+        bot_domain = os.environ.get("BOT_DOMAIN")
+        if bot_domain:
+            try:
+                webhook_url = f"https://{bot_domain}/webhook"
+                result = await telegram_app.bot.set_webhook(
+                    url=webhook_url,
+                    allowed_updates=["message", "callback_query", "poll", "poll_answer"]
+                )
+                if result:
+                    print(f"✅ Webhook auto-configured: {webhook_url}")
+                else:
+                    print(f"⚠️ Webhook setup returned False for: {webhook_url}")
+            except Exception as we:
+                print(f"⚠️ Auto-webhook failed: {we}")
+                print("   You can manually set it via POST /set-webhook")
+        else:
+            print("ℹ️ BOT_DOMAIN not set - webhook must be configured manually")
+            print("   POST /set-webhook with {'url': 'https://your-domain.com'}")
+        
     except ValueError as e:
         print(f"⚠️ Telegram setup skipped: {e}")
     except Exception as e:

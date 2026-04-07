@@ -78,9 +78,15 @@ async def transcribe_voice(audio_bytes: bytes, prompt: str = None) -> str:
             response_format="text",
             temperature=0.0
         )
-        return transcription.text
+        # Handle different response formats
+        if isinstance(transcription, str):
+            return transcription
+        elif hasattr(transcription, 'text'):
+            return transcription.text
+        else:
+            return str(transcription)
     except Exception as e:
-        print(f"Whisper error: {e}")
+        print(f"Whisper transcription error: {e}")
         return None
 
 
