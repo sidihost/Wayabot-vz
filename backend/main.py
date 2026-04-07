@@ -58,6 +58,7 @@ from handlers import (
     note_command, notes_command, search_notes_command, del_note_command,
     task_command, tasks_command, done_command, del_task_command,
     build_command, my_bots_command, templates_command, activate_bot_command,
+    bots_menu_command, edit_bot_command,  # New bot builder commands
     chat_command, clear_command, translate_command, summarize_command, quiz_command,
     personalities_command, new_personality_command, set_personality_command,
     poll_command, poll_results_command,
@@ -121,9 +122,11 @@ async def setup_telegram_app() -> Application:
         
         # Bot Building
         ("build", build_command),
+        ("bots", bots_menu_command),  # New - shows full bot builder menu
         ("mybots", my_bots_command),
         ("templates", templates_command),
         ("usebot", activate_bot_command),
+        ("editbot", edit_bot_command),  # New - edit bot via prompt
         
         # AI Chat
         ("chat", chat_command),

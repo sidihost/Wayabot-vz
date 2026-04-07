@@ -5,10 +5,14 @@ An intelligent Telegram bot that helps users create custom bots, set reminders, 
 ## Features
 
 - **AI Chat with Streaming** - Real-time typing effect as AI responds
-- **Bot Builder** - Create custom AI bots just by describing them
-  - Instant creation: `/build a fitness coach bot`
-  - Get a shareable link: `t.me/YourBot?start=bot_123`
-  - Users can try your bot instantly
+- **Advanced Bot Builder** - Create powerful AI bots with cards, automation, and code export
+  - Create with AI: Describe what you want, get a working bot
+  - Feature Cards: Select capabilities like auto-replies, scheduling, forms
+  - Template Library: Pre-built bots for business, education, lifestyle
+  - Bot Management: View, edit, delete, and share your bots
+  - Knowledge Base: Train your bot with custom Q&A
+  - Automations: Auto-reply rules for keywords
+  - Export Code: Get standalone Python code for your bot
 - **Voice Messages** - Transcription with Groq Whisper + text-to-speech with ElevenLabs
 - **Smart Reminders** - Natural language ("remind me to call mom in 2 hours")
 - **Notes & Tasks** - Quick note-taking and task management
@@ -16,7 +20,9 @@ An intelligent Telegram bot that helps users create custom bots, set reminders, 
 - **Emotion AI** - Empathic responses based on your mood
 - **Gamification** - XP, levels, streaks, and achievements
 
-## Bot Building Examples
+## Bot Builder - Full Feature List
+
+### Create Bots
 
 ```
 /build a coffee shop assistant bot
@@ -26,10 +32,54 @@ An intelligent Telegram bot that helps users create custom bots, set reminders, 
 /build a quiz bot about science
 ```
 
-After creation, you get:
-- A shareable link anyone can use
-- Your bot is immediately active
-- The AI greets users automatically
+Or just type naturally:
+```
+I need a bot for my restaurant
+create a meditation guide bot
+make me a quiz bot about history
+```
+
+### Manage Bots
+
+- `/mybots` - View all your bots
+- Tap "Edit" on any bot to:
+  - Change name, personality, greeting
+  - Add custom commands
+  - Add knowledge base entries
+  - Create automation rules
+  - View analytics
+  - Export as Python code
+
+### Edit via Prompt
+
+Just describe what you want to change:
+```
+make my coffee bot more friendly
+add a pricing command to my support bot
+change the greeting to be more professional
+```
+
+### Bot Features You Can Add
+
+| Feature | Description |
+|---------|-------------|
+| AI Chat | Smart conversations with context memory |
+| Commands | Custom /commands your bot responds to |
+| Auto Replies | Trigger responses on keywords |
+| Scheduler | Send messages at specific times |
+| Knowledge Base | Train bot with custom Q&A |
+| Buttons | Interactive menus and actions |
+| Forms | Collect user information |
+| Analytics | Track bot usage and stats |
+| Voice | Voice messages and TTS |
+| Multi-Language | Support multiple languages |
+
+### After Creation
+
+- Get a shareable link: `t.me/YourBot?start=bot_123`
+- Bot is immediately active
+- AI greets users automatically
+- Export standalone Python code to run anywhere
 
 ---
 

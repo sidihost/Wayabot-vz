@@ -165,13 +165,14 @@ async def safe_reply_text(message, text: str, parse_mode=None, reply_markup=None
 
 import database as db
 from ai_engine import (
-    generate_response, generate_bot_suggestion, analyze_message_intent,
-    parse_reminder_request, parse_task_request, summarize_text, translate_text,
-    generate_quiz_question, get_smart_suggestions, get_bot_system_prompt, WAYA_SYSTEM_PROMPT,
-    transcribe_voice,  # 🎙 Groq Whisper
-    compound_response,  # 🤖 COMPOUND - Agentic AI with tools!
-    generate_response_streaming  # Streaming responses for chat effect
+    generate_response,
+    generate_response_streaming,
+    transcribe_voice,
+    generate_bot_suggestion,
+    compound_response,
+    WAYA_SYSTEM_PROMPT
 )
+import bot_builder
 from voice_engine import voice_engine, voice_preferences, VoiceEngine
 from emotion_engine import emotion_engine, EmotionEngine
 
@@ -1251,6 +1252,83 @@ async def activate_bot_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ Please provide a valid bot ID.")
 
 
+async def bots_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /bots command - show full bot builder menu."""
+    await ensure_user(update)
+    await track_command(update.effective_user.id, "bots")
+    await bot_builder.show_bot_builder_menu(update, context)
+
+
+async def edit_bot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /editbot command - edit bot via natural language."""
+    await ensure_user(update)
+    user_id = update.effective_user.id
+    await track_command(user_id, "editbot")
+    
+    if not context.args:
+        bots = await db.get_user_bots(user_id)
+        if not bots:
+            await update.message.reply_text(
+                "You haven't created any bots yet.\n\n"
+                "Use `/build` to create your first one!",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        await update.message.reply_text(
+            "*Edit a Bot*\n\n"
+            "Describe what you want to change:\n\n"
+            "Examples:\n"
+            "`/editbot make my coffee bot more friendly`\n"
+            "`/editbot add a pricing command`\n"
+            "`/editbot change the greeting message`\n\n"
+            "Or just type what you want and I'll update your active bot.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    edit_request = " ".join(context.args)
+    
+    # Find which bot to edit
+    bots = await db.get_user_bots(user_id)
+    if not bots:
+        await update.message.reply_text("You don't have any bots yet! Use /build to create one.")
+        return
+    
+    # Check if user mentioned a specific bot name
+    bot_to_edit = None
+    edit_lower = edit_request.lower()
+    for bot in bots:
+        if bot['name'].lower() in edit_lower:
+            bot_to_edit = bot
+            break
+    
+    # Use active bot if no specific bot mentioned
+    if not bot_to_edit:
+        session = await db.get_session(user_id)
+        active_bot_id = session.get('active_bot_id') if session else None
+        if active_bot_id:
+            bot_to_edit = next((b for b in bots if b['id'] == active_bot_id), bots[0])
+        else:
+            bot_to_edit = bots[0]
+    
+    await update.message.chat.send_action(ChatAction.TYPING)
+    loading = await update.message.reply_text(f"Updating *{bot_to_edit['name']}*...", parse_mode=ParseMode.MARKDOWN)
+    
+    result = await bot_builder.edit_bot_with_prompt(bot_to_edit['id'], user_id, edit_request)
+    
+    if "error" in result:
+        await loading.edit_text(f"Error: {result['error']}")
+    else:
+        keyboard = [[InlineKeyboardButton("View Bot", callback_data=f"bb_edit_{bot_to_edit['id']}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await loading.edit_text(
+            f"*{bot_to_edit['name']}* updated!\n\n{result.get('changes', '')}",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+
+
 # =====================================================
 # AI CHAT COMMANDS
 # =====================================================
@@ -1673,6 +1751,196 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     session = await db.get_session(user_id)
     state = session.get('current_state', 'idle') if session else 'idle'
     state_data = session.get('state_data', {}) if session else {}
+    
+    # =============================================================================
+    # BOT BUILDER STATE HANDLERS
+    # =============================================================================
+    
+    # Handle bot builder flows
+    if state == "bb_waiting_description":
+        # User is describing the bot they want to create
+        await update.message.chat.send_action(ChatAction.TYPING)
+        loading = await update.message.reply_text("Creating your bot...")
+        
+        try:
+            result = await bot_builder.create_bot_with_ai(update, context, message_text)
+            
+            if "error" in result:
+                await loading.edit_text(f"Error: {result['error']}")
+                await db.clear_session_state(user_id)
+                return
+            
+            config = result["config"]
+            share_link = result["share_link"]
+            bot_name = config.get('bot_name', 'Your Bot')
+            
+            keyboard = [
+                [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
+                [InlineKeyboardButton("Share Bot", url=share_link)],
+                [InlineKeyboardButton("Edit Bot", callback_data=f"bb_edit_{result['bot_id']}")],
+                [InlineKeyboardButton("My Bots", callback_data="bb_my_bots")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await loading.edit_text(
+                f"*Your AI Bot is Ready!*\n\n"
+                f"*{bot_name}*\n"
+                f"{config.get('bot_description', '')}\n\n"
+                f"*Features:*\n" +
+                "\n".join([f"- {f}" for f in config.get('features', [])[:5]]) +
+                f"\n\n*Share your bot:*\n"
+                f"`{share_link}`\n\n"
+                f"Send a message to start chatting!",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+            
+            # Send greeting from the bot
+            greeting = config.get('greeting_message', f"Hi! I'm {bot_name}.")
+            clean_greeting = clean_markdown_for_telegram(greeting)
+            await update.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+            
+        except Exception as e:
+            print(f"Bot creation error: {e}")
+            await loading.edit_text("Sorry, something went wrong. Please try again with /build")
+        
+        await db.clear_session_state(user_id)
+        return
+    
+    elif state == "bb_editing_name":
+        bot_id = state_data.get('bot_id')
+        async with db.get_connection() as conn:
+            await conn.execute(
+                "UPDATE custom_bots SET name = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3",
+                message_text[:100], bot_id, user_id
+            )
+        await db.clear_session_state(user_id)
+        await update.message.reply_text(f"Bot renamed to *{message_text[:100]}*!", parse_mode=ParseMode.MARKDOWN)
+        return
+    
+    elif state == "bb_editing_persona":
+        bot_id = state_data.get('bot_id')
+        result = await bot_builder.edit_bot_with_prompt(bot_id, user_id, message_text)
+        await db.clear_session_state(user_id)
+        
+        if "error" in result:
+            await update.message.reply_text(f"Error: {result['error']}")
+        else:
+            await update.message.reply_text(f"Bot updated! {result.get('changes', '')}")
+        return
+    
+    elif state == "bb_editing_greeting":
+        bot_id = state_data.get('bot_id')
+        async with db.get_connection() as conn:
+            await conn.execute(
+                "UPDATE custom_bots SET welcome_message = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3",
+                message_text, bot_id, user_id
+            )
+        await db.clear_session_state(user_id)
+        await update.message.reply_text("Greeting message updated!")
+        return
+    
+    elif state == "bb_adding_command":
+        bot_id = state_data.get('bot_id')
+        parts = message_text.split("|")
+        if len(parts) < 2:
+            await update.message.reply_text("Format: `/command | description | response`\n\nTry again:")
+            return
+        
+        cmd = parts[0].strip().replace("/", "")
+        desc = parts[1].strip() if len(parts) > 1 else ""
+        response = parts[2].strip() if len(parts) > 2 else desc
+        
+        # Add command to bot
+        bot = await db.get_bot(bot_id)
+        if bot:
+            commands = bot.get('commands', []) or []
+            commands.append({"command": cmd, "description": desc, "response": response})
+            async with db.get_connection() as conn:
+                await conn.execute(
+                    "UPDATE custom_bots SET commands = $1, updated_at = NOW() WHERE id = $2",
+                    json.dumps(commands), bot_id
+                )
+        
+        await db.clear_session_state(user_id)
+        await update.message.reply_text(f"Command `/{cmd}` added to your bot!")
+        return
+    
+    elif state == "bb_adding_knowledge":
+        bot_id = state_data.get('bot_id')
+        parts = message_text.split("|")
+        if len(parts) < 2:
+            await update.message.reply_text("Format: `Question | Answer`\n\nTry again:")
+            return
+        
+        question = parts[0].strip()
+        answer = parts[1].strip()
+        
+        await db.add_bot_knowledge(bot_id, question, answer)
+        await db.clear_session_state(user_id)
+        await update.message.reply_text("Knowledge added to your bot!")
+        return
+    
+    elif state == "bb_adding_automation":
+        bot_id = state_data.get('bot_id')
+        parts = message_text.split("|")
+        if len(parts) < 2:
+            await update.message.reply_text("Format: `trigger | response`\n\nTry again:")
+            return
+        
+        trigger = parts[0].strip()
+        response = parts[1].strip()
+        
+        result = await bot_builder.add_bot_automation(bot_id, user_id, trigger, "reply", response)
+        await db.clear_session_state(user_id)
+        
+        if "error" in result:
+            await update.message.reply_text(f"Error: {result['error']}")
+        else:
+            await update.message.reply_text(f"Automation added! Bot will now respond to '{trigger}'")
+        return
+    
+    elif state == "bb_edit_prompt":
+        # User wants to edit a bot via natural language
+        bots = await db.get_user_bots(user_id)
+        if not bots:
+            await update.message.reply_text("You don't have any bots yet! Use /build to create one.")
+            await db.clear_session_state(user_id)
+            return
+        
+        # Try to find which bot user is referring to
+        bot_to_edit = None
+        message_lower = message_text.lower()
+        for bot in bots:
+            if bot['name'].lower() in message_lower:
+                bot_to_edit = bot
+                break
+        
+        # If no specific bot mentioned, use the active one
+        if not bot_to_edit:
+            session = await db.get_session(user_id)
+            active_bot_id = session.get('active_bot_id') if session else None
+            if active_bot_id:
+                bot_to_edit = next((b for b in bots if b['id'] == active_bot_id), bots[0])
+            else:
+                bot_to_edit = bots[0]  # Use first bot
+        
+        await update.message.chat.send_action(ChatAction.TYPING)
+        
+        result = await bot_builder.edit_bot_with_prompt(bot_to_edit['id'], user_id, message_text)
+        await db.clear_session_state(user_id)
+        
+        if "error" in result:
+            await update.message.reply_text(f"Error: {result['error']}")
+        else:
+            keyboard = [[InlineKeyboardButton("View Bot", callback_data=f"bb_edit_{bot_to_edit['id']}")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                f"*{bot_to_edit['name']}* updated!\n\n{result.get('changes', '')}",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+        return
     
     # Handle personality creation flow
     if state == "creating_personality":
@@ -2158,8 +2426,372 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
     
     elif data == "build_bot":
+        await bot_builder.show_bot_builder_menu(update, context)
+    
+    # =============================================================================
+    # BOT BUILDER CALLBACKS
+    # =============================================================================
+    
+    elif data == "bb_menu":
+        await bot_builder.show_bot_builder_menu(update, context)
+    
+    elif data == "bb_create_ai":
+        await query.message.edit_text(
+            "*Create with AI*\n\n"
+            "Just describe the bot you want!\n\n"
+            "Examples:\n"
+            "- `a customer support bot for my coffee shop`\n"
+            "- `a fitness coach that gives workout tips`\n"
+            "- `a quiz bot about world history`\n"
+            "- `a language tutor for Spanish`\n\n"
+            "Send your description now:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        await db.update_session_state(user_id, "bb_waiting_description", {})
+    
+    elif data == "bb_templates":
+        await bot_builder.show_category_templates(update, context)
+    
+    elif data == "bb_my_bots":
+        await bot_builder.show_my_bots(update, context)
+    
+    elif data.startswith("bb_use_"):
+        bot_id = int(data.replace("bb_use_", ""))
+        await db.set_active_bot(user_id, bot_id)
+        bot = await db.get_bot(bot_id)
+        bot_name = bot.get('name', 'Bot') if bot else 'Bot'
+        await query.answer(f"{bot_name} is now active!")
         await query.message.reply_text(
-            "🤖 `/build a coffee shop bot` or pick a template!"
+            f"*{bot_name}* is now active!\n\n"
+            f"Start chatting - your bot is ready to respond.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("bb_edit_"):
+        bot_id = int(data.replace("bb_edit_", ""))
+        await bot_builder.show_bot_edit_menu(update, context, bot_id)
+    
+    elif data.startswith("bb_editname_"):
+        bot_id = int(data.replace("bb_editname_", ""))
+        await db.update_session_state(user_id, "bb_editing_name", {"bot_id": bot_id})
+        await query.message.edit_text(
+            "*Edit Bot Name*\n\n"
+            "Send the new name for your bot:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("bb_editpersona_"):
+        bot_id = int(data.replace("bb_editpersona_", ""))
+        await db.update_session_state(user_id, "bb_editing_persona", {"bot_id": bot_id})
+        await query.message.edit_text(
+            "*Edit Bot Personality*\n\n"
+            "Describe how your bot should behave:\n\n"
+            "Example: `Make it more friendly and casual, add humor`\n\n"
+            "Send your changes:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("bb_editgreet_"):
+        bot_id = int(data.replace("bb_editgreet_", ""))
+        await db.update_session_state(user_id, "bb_editing_greeting", {"bot_id": bot_id})
+        await query.message.edit_text(
+            "*Edit Greeting Message*\n\n"
+            "Send the new greeting message your bot will use when users start a conversation:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("bb_addcmd_"):
+        bot_id = int(data.replace("bb_addcmd_", ""))
+        await db.update_session_state(user_id, "bb_adding_command", {"bot_id": bot_id})
+        await query.message.edit_text(
+            "*Add Custom Command*\n\n"
+            "Format: `/command_name | Description | Response`\n\n"
+            "Example:\n"
+            "`/pricing | Show prices | Our plans start at $9.99/month`\n\n"
+            "Send your command:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("bb_addknow_"):
+        bot_id = int(data.replace("bb_addknow_", ""))
+        await db.update_session_state(user_id, "bb_adding_knowledge", {"bot_id": bot_id})
+        await query.message.edit_text(
+            "*Add to Knowledge Base*\n\n"
+            "Teach your bot new information.\n\n"
+            "Format: `Question | Answer`\n\n"
+            "Example:\n"
+            "`What are your hours? | We're open Monday-Friday 9am-5pm`\n\n"
+            "Send your Q&A:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("bb_addauto_"):
+        bot_id = int(data.replace("bb_addauto_", ""))
+        await db.update_session_state(user_id, "bb_adding_automation", {"bot_id": bot_id})
+        await query.message.edit_text(
+            "*Add Automation*\n\n"
+            "Create automatic responses for keywords.\n\n"
+            "Format: `trigger_word | response`\n\n"
+            "Examples:\n"
+            "`price | Our plans start at $9.99/month!`\n"
+            "`hello | Hey there! How can I help?`\n\n"
+            "Send your automation:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("bb_stats_"):
+        bot_id = int(data.replace("bb_stats_", ""))
+        analytics = await bot_builder.get_bot_analytics(bot_id, user_id)
+        
+        if "error" in analytics:
+            await query.answer(analytics["error"], show_alert=True)
+            return
+        
+        keyboard = [[InlineKeyboardButton("Back", callback_data=f"bb_edit_{bot_id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.edit_text(
+            f"*Analytics: {analytics['bot_name']}*\n\n"
+            f"*Usage*\n"
+            f"Total uses: {analytics['total_uses']}\n"
+            f"Total conversations: {analytics['total_conversations']}\n"
+            f"Unique users: {analytics['unique_users']}\n\n"
+            f"*Activity*\n"
+            f"Messages today: {analytics['messages_today']}\n"
+            f"Messages this week: {analytics['messages_this_week']}\n\n"
+            f"*Info*\n"
+            f"Type: {analytics['bot_type']}\n"
+            f"Created: {analytics['created_at']}\n"
+            f"Rating: {analytics['rating']}/5",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    
+    elif data.startswith("bb_code_"):
+        bot_id = int(data.replace("bb_code_", ""))
+        
+        await query.message.edit_text("Generating Python code...")
+        
+        code = await bot_builder.generate_bot_code(bot_id, user_id)
+        
+        # Send as file
+        import io as io_module
+        code_file = io_module.BytesIO(code.encode('utf-8'))
+        code_file.name = "my_bot.py"
+        
+        keyboard = [[InlineKeyboardButton("Back", callback_data=f"bb_edit_{bot_id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.reply_document(
+            document=code_file,
+            filename="my_bot.py",
+            caption=(
+                "*Your Bot Code*\n\n"
+                "This is standalone Python code you can run anywhere!\n\n"
+                "*Setup:*\n"
+                "1. `pip install python-telegram-bot groq`\n"
+                "2. Set `TELEGRAM_BOT_TOKEN` from @BotFather\n"
+                "3. Set `GROQ_API_KEY` from console.groq.com\n"
+                "4. Run: `python my_bot.py`"
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    
+    elif data.startswith("bb_delete_"):
+        bot_id = int(data.replace("bb_delete_", ""))
+        keyboard = [
+            [InlineKeyboardButton("Yes, Delete", callback_data=f"bb_confirm_del_{bot_id}"),
+             InlineKeyboardButton("Cancel", callback_data=f"bb_edit_{bot_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.edit_text(
+            "*Delete Bot?*\n\n"
+            "This action cannot be undone. All bot data will be lost.\n\n"
+            "Are you sure?",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    
+    elif data.startswith("bb_confirm_del_"):
+        bot_id = int(data.replace("bb_confirm_del_", ""))
+        
+        async with db.get_connection() as conn:
+            result = await conn.execute(
+                "DELETE FROM custom_bots WHERE id = $1 AND user_id = $2",
+                bot_id, user_id
+            )
+        
+        await query.answer("Bot deleted!")
+        await bot_builder.show_my_bots(update, context)
+    
+    elif data.startswith("bb_cat_"):
+        category = data.replace("bb_cat_", "")
+        cat_info = bot_builder.BOT_CATEGORIES.get(category, {})
+        templates = cat_info.get('templates', [])
+        
+        keyboard = []
+        for tmpl in templates:
+            name = tmpl.replace('_', ' ').title()
+            keyboard.append([InlineKeyboardButton(name, callback_data=f"bb_tmpl_{tmpl}")])
+        
+        keyboard.append([InlineKeyboardButton("Back", callback_data="bb_templates")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.edit_text(
+            f"*{cat_info.get('name', 'Category')} Bots*\n\n"
+            f"Select a template to create:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    
+    elif data.startswith("bb_tmpl_"):
+        template_name = data.replace("bb_tmpl_", "")
+        # Create bot from template using AI
+        await query.message.edit_text("Creating your bot...")
+        
+        result = await bot_builder.create_bot_with_ai(update, context, template_name.replace('_', ' '))
+        
+        if "error" in result:
+            await query.message.edit_text(f"Error: {result['error']}")
+            return
+        
+        config = result["config"]
+        share_link = result["share_link"]
+        bot_name = config.get('bot_name', 'Your Bot')
+        
+        keyboard = [
+            [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
+            [InlineKeyboardButton("Share Bot", url=share_link)],
+            [InlineKeyboardButton("My Bots", callback_data="bb_my_bots")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.edit_text(
+            f"*Your AI Bot is Ready!*\n\n"
+            f"*{bot_name}*\n"
+            f"{config.get('bot_description', '')}\n\n"
+            f"*Share your bot:*\n"
+            f"`{share_link}`\n\n"
+            f"Send a message to start chatting!",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+        
+        # Send greeting
+        greeting = config.get('greeting_message', f"Hi! I'm {bot_name}.")
+        clean_greeting = clean_markdown_for_telegram(greeting)
+        await query.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+    
+    elif data.startswith("bb_feat_"):
+        feature_key = data.replace("bb_feat_", "")
+        await bot_builder.handle_feature_selection(update, context, feature_key)
+    
+    elif data == "bb_features_done":
+        session = await db.get_session(user_id)
+        state_data = session.get('state_data', {}) if session else {}
+        selected = state_data.get('selected_features', [])
+        
+        if not selected:
+            await query.answer("Please select at least one feature!", show_alert=True)
+            return
+        
+        # Generate bot with selected features
+        features_desc = ", ".join([bot_builder.BOT_FEATURE_CARDS[f]['title'] for f in selected])
+        await query.message.edit_text(f"Creating bot with: {features_desc}...")
+        
+        result = await bot_builder.create_bot_with_ai(
+            update, context, 
+            f"A bot with these features: {features_desc}"
+        )
+        
+        if "error" in result:
+            await query.message.edit_text(f"Error: {result['error']}")
+            return
+        
+        config = result["config"]
+        share_link = result["share_link"]
+        bot_name = config.get('bot_name', 'Your Bot')
+        
+        keyboard = [
+            [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
+            [InlineKeyboardButton("Share Bot", url=share_link)],
+            [InlineKeyboardButton("My Bots", callback_data="bb_my_bots")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.edit_text(
+            f"*Your AI Bot is Ready!*\n\n"
+            f"*{bot_name}*\n"
+            f"{config.get('bot_description', '')}\n\n"
+            f"*Features:*\n"
+            f"{features_desc}\n\n"
+            f"*Share your bot:*\n"
+            f"`{share_link}`",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    
+    elif data == "bb_edit":
+        bots = await db.get_user_bots(user_id)
+        if not bots:
+            await query.answer("You don't have any bots yet!", show_alert=True)
+            return
+        await query.message.edit_text(
+            "*Edit a Bot*\n\n"
+            "Send the bot name or describe what you want to change:\n\n"
+            "Examples:\n"
+            "- `make my coffee bot more friendly`\n"
+            "- `add a pricing command to support bot`\n"
+            "- `change the greeting message`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        await db.update_session_state(user_id, "bb_edit_prompt", {})
+    
+    elif data == "bb_analytics":
+        bots = await db.get_user_bots(user_id)
+        if not bots:
+            await query.answer("You don't have any bots yet!", show_alert=True)
+            return
+        
+        keyboard = []
+        for bot in bots[:5]:
+            keyboard.append([InlineKeyboardButton(
+                f"{bot['name']} ({bot.get('usage_count', 0)} uses)",
+                callback_data=f"bb_stats_{bot['id']}"
+            )])
+        keyboard.append([InlineKeyboardButton("Back", callback_data="bb_menu")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.edit_text(
+            "*Bot Analytics*\n\n"
+            "Select a bot to view its stats:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    
+    elif data == "bb_export_code":
+        bots = await db.get_user_bots(user_id)
+        if not bots:
+            await query.answer("You don't have any bots yet!", show_alert=True)
+            return
+        
+        keyboard = []
+        for bot in bots[:5]:
+            keyboard.append([InlineKeyboardButton(
+                bot['name'],
+                callback_data=f"bb_code_{bot['id']}"
+            )])
+        keyboard.append([InlineKeyboardButton("Back", callback_data="bb_menu")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.edit_text(
+            "*Export Bot Code*\n\n"
+            "Get standalone Python code for your bot.\n\n"
+            "Select a bot to export:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
         )
     
     elif data == "start_chat":

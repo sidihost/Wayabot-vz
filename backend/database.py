@@ -1678,6 +1678,58 @@ async def increment_bot_usage(bot_id: int):
         ''', bot_id)
 
 
+async def add_bot_knowledge(bot_id: int, question: str, answer: str, keywords: List[str] = None, category: str = None) -> int:
+    """Add a knowledge base entry to a bot"""
+    async with get_connection() as conn:
+        knowledge_id = await conn.fetchval('''
+            INSERT INTO bot_knowledge (bot_id, question, answer, keywords, category)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+        ''', bot_id, question, answer, keywords or [], category)
+        return knowledge_id
+
+
+async def get_bot_knowledge(bot_id: int, search_query: str = None) -> List[Dict[str, Any]]:
+    """Get knowledge base entries for a bot, optionally filtered by search"""
+    async with get_connection() as conn:
+        if search_query:
+            rows = await conn.fetch('''
+                SELECT * FROM bot_knowledge 
+                WHERE bot_id = $1 AND (
+                    question ILIKE $2 OR answer ILIKE $2 OR $3 = ANY(keywords)
+                )
+                ORDER BY priority DESC, usage_count DESC
+            ''', bot_id, f'%{search_query}%', search_query.lower())
+        else:
+            rows = await conn.fetch('''
+                SELECT * FROM bot_knowledge WHERE bot_id = $1
+                ORDER BY priority DESC, usage_count DESC
+            ''', bot_id)
+        return [dict(row) for row in rows]
+
+
+async def search_bot_knowledge(bot_id: int, query: str) -> Optional[Dict[str, Any]]:
+    """Search for the best matching knowledge entry"""
+    async with get_connection() as conn:
+        # Full text search
+        row = await conn.fetchrow('''
+            SELECT *, ts_rank(to_tsvector('english', question || ' ' || answer), plainto_tsquery($2)) as rank
+            FROM bot_knowledge 
+            WHERE bot_id = $1 AND to_tsvector('english', question || ' ' || answer) @@ plainto_tsquery($2)
+            ORDER BY rank DESC, priority DESC
+            LIMIT 1
+        ''', bot_id, query)
+        
+        if row:
+            # Increment usage count
+            await conn.execute(
+                "UPDATE bot_knowledge SET usage_count = usage_count + 1 WHERE id = $1",
+                row['id']
+            )
+            return dict(row)
+        return None
+
+
 # =====================================================
 # AI PERSONALITY OPERATIONS
 # =====================================================
