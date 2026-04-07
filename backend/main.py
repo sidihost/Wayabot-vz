@@ -52,6 +52,7 @@ from telegram.ext import (
 
 import database as db
 from scheduler import WayaScheduler
+from bot_runtime import start_bot_runtime, stop_bot_runtime, bot_runtime
 from handlers import (
     start_command, help_command, menu_command,
     remind_command, reminders_command, del_reminder_command, snooze_reminder_command,
@@ -237,14 +238,26 @@ async def lifespan(app: fastapi.FastAPI):
     except Exception as e:
         print(f"❌ Telegram error: {e}")
     
+    # Start bot runtime engine (autonomous bot execution)
+    try:
+        await start_bot_runtime()
+        print("✅ Bot Runtime Engine started (autonomous bot execution)")
+    except Exception as e:
+        print(f"⚠️ Bot Runtime startup error: {e}")
+    
     print("=" * 50)
     print("🤖 Waya is ready and listening!")
+    print("   All user bots run automatically on our infrastructure")
     print("=" * 50)
     
     yield
     
     # Shutdown
     print("\n🛑 Shutting down Waya...")
+    
+    # Stop bot runtime first
+    await stop_bot_runtime()
+    print("✅ Bot Runtime Engine stopped")
     
     if scheduler:
         await scheduler.stop()
@@ -322,14 +335,45 @@ async def health():
     except:
         pass
     
+    runtime_bots = bot_runtime.get_all_bots_status() if bot_runtime else []
+    
     return {
         "status": "healthy" if db_healthy and telegram_app else "degraded",
         "components": {
             "database": "healthy" if db_healthy else "unhealthy",
             "telegram": "connected" if telegram_app else "disconnected",
-            "scheduler": "running" if scheduler and scheduler._running else "stopped"
-        }
+            "scheduler": "running" if scheduler and scheduler._running else "stopped",
+            "bot_runtime": "running" if bot_runtime._running else "stopped"
+        },
+        "active_bots": len(runtime_bots)
     }
+
+
+@app.get("/runtime/bots")
+async def get_runtime_bots():
+    """Get status of all running user bots."""
+    if not bot_runtime:
+        return {"bots": [], "count": 0}
+    
+    bots = bot_runtime.get_all_bots_status()
+    return {
+        "bots": bots,
+        "count": len(bots),
+        "runtime_status": "running" if bot_runtime._running else "stopped"
+    }
+
+
+@app.get("/runtime/bots/{bot_id}")
+async def get_runtime_bot_status(bot_id: int):
+    """Get status of a specific bot."""
+    if not bot_runtime:
+        raise HTTPException(status_code=503, detail="Bot runtime not initialized")
+    
+    status = bot_runtime.get_bot_status(bot_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Bot not found in runtime")
+    
+    return status
 
 
 # =====================================================
