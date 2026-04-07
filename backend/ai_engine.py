@@ -289,6 +289,57 @@ Respond in a {response_style} manner. Adapt your tone and language accordingly:
         return f"I apologize, but I encountered an error: {str(e)}. Please try again."
 
 
+async def generate_response_streaming(
+    user_message: str,
+    conversation_history: List[Dict[str, str]] = None,
+    system_prompt: str = None,
+    user_name: str = None,
+    temperature: float = 0.7,
+    max_tokens: int = 1024
+):
+    """
+    Generate AI response with streaming support.
+    Yields chunks of text as they are generated.
+    """
+    client = get_groq_client()
+    
+    # Build the system prompt
+    base_prompt = system_prompt or WAYA_SYSTEM_PROMPT
+    if user_name:
+        base_prompt += f"\n\nYou are talking to {user_name}. Address them by name occasionally to be personal."
+    
+    base_prompt += f"\n\nCurrent date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    
+    messages = [{"role": "system", "content": base_prompt}]
+    
+    # Add conversation history
+    if conversation_history:
+        for msg in conversation_history[-10:]:
+            messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+    
+    messages.append({"role": "user", "content": user_message})
+    
+    try:
+        # Use streaming
+        stream = await client.chat.completions.create(
+            model=BEST_MODEL,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True
+        )
+        
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+                
+    except Exception as e:
+        yield f"I apologize, but I encountered an error: {str(e)}. Please try again."
+
+
 async def generate_empathic_response(
     user_message: str,
     user_name: str,
