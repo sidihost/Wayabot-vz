@@ -1,0 +1,264 @@
+#!/bin/bash
+
+# =============================================================================
+# WAYA TELEGRAM BOT - ONE-CLICK SETUP FOR DIGITALOCEAN
+# =============================================================================
+# This script will:
+# 1. Install Docker and Docker Compose
+# 2. Set up environment variables
+# 3. Generate SSL certificates
+# 4. Start the bot
+# =============================================================================
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}"
+echo "╔═══════════════════════════════════════════════════════════════╗"
+echo "║                                                               ║"
+echo "║   WAYA - Intelligent Telegram Bot Builder                     ║"
+echo "║   DigitalOcean Deployment Setup                               ║"
+echo "║                                                               ║"
+echo "╚═══════════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Please run as root (use sudo)${NC}"
+    exit 1
+fi
+
+# =============================================================================
+# STEP 1: Install Docker
+# =============================================================================
+echo -e "\n${YELLOW}[1/6] Installing Docker...${NC}"
+
+if command -v docker &> /dev/null; then
+    echo -e "${GREEN}Docker already installed${NC}"
+else
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sh get-docker.sh
+    rm get-docker.sh
+    systemctl enable docker
+    systemctl start docker
+    echo -e "${GREEN}Docker installed successfully${NC}"
+fi
+
+# Install Docker Compose
+if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
+    echo -e "${GREEN}Docker Compose already installed${NC}"
+else
+    apt-get update
+    apt-get install -y docker-compose-plugin
+    echo -e "${GREEN}Docker Compose installed successfully${NC}"
+fi
+
+# =============================================================================
+# STEP 2: Create Environment File
+# =============================================================================
+echo -e "\n${YELLOW}[2/6] Setting up environment variables...${NC}"
+
+if [ -f .env ]; then
+    echo -e "${GREEN}Found existing .env file${NC}"
+    read -p "Do you want to reconfigure? (y/n): " reconfigure
+    if [ "$reconfigure" != "y" ]; then
+        echo "Keeping existing configuration"
+    else
+        rm .env
+    fi
+fi
+
+if [ ! -f .env ]; then
+    echo ""
+    echo -e "${BLUE}Let's configure your bot:${NC}"
+    echo ""
+    
+    # Telegram Bot Token
+    echo -e "${YELLOW}1. TELEGRAM BOT TOKEN${NC}"
+    echo "   Get it from @BotFather on Telegram"
+    echo "   - Open Telegram and search for @BotFather"
+    echo "   - Send /newbot and follow instructions"
+    echo "   - Copy the token (looks like: 123456:ABC-DEF1234...)"
+    echo ""
+    read -p "Enter your Telegram Bot Token: " TELEGRAM_BOT_TOKEN
+    
+    # Groq API Key
+    echo ""
+    echo -e "${YELLOW}2. GROQ API KEY${NC}"
+    echo "   Get it from https://console.groq.com/keys"
+    echo "   - Sign up/login at console.groq.com"
+    echo "   - Go to API Keys section"
+    echo "   - Create a new key and copy it"
+    echo ""
+    read -p "Enter your Groq API Key: " GROQ_API_KEY
+    
+    # Domain for webhook
+    echo ""
+    echo -e "${YELLOW}3. YOUR DOMAIN (for webhook)${NC}"
+    echo "   This should be your Droplet's domain or IP"
+    echo "   Example: bot.yourdomain.com or your Droplet IP"
+    echo ""
+    read -p "Enter your domain/IP: " BOT_DOMAIN
+    
+    # Database credentials
+    echo ""
+    echo -e "${YELLOW}4. DATABASE CREDENTIALS (press Enter for defaults)${NC}"
+    read -p "Database user [waya]: " DB_USER
+    DB_USER=${DB_USER:-waya}
+    read -p "Database password [auto-generate]: " DB_PASSWORD
+    DB_PASSWORD=${DB_PASSWORD:-$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)}
+    read -p "Database name [wayabot]: " DB_NAME
+    DB_NAME=${DB_NAME:-wayabot}
+    
+    # Optional: ElevenLabs
+    echo ""
+    echo -e "${YELLOW}5. ELEVENLABS API KEY (optional - for voice replies)${NC}"
+    echo "   Get it from https://elevenlabs.io"
+    echo "   Press Enter to skip"
+    read -p "ElevenLabs API Key: " ELEVENLABS_API_KEY
+    
+    # Optional: Hume AI
+    echo ""
+    echo -e "${YELLOW}6. HUME AI API KEY (optional - for emotion detection)${NC}"
+    echo "   Get it from https://hume.ai"
+    echo "   Press Enter to skip"
+    read -p "Hume API Key: " HUME_API_KEY
+    
+    # Create .env file
+    cat > .env << EOF
+# =============================================================================
+# WAYA BOT CONFIGURATION
+# Generated on $(date)
+# =============================================================================
+
+# Telegram Bot (REQUIRED)
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+
+# Groq AI (REQUIRED)
+GROQ_API_KEY=${GROQ_API_KEY}
+
+# Domain for webhook
+BOT_DOMAIN=${BOT_DOMAIN}
+
+# Database
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PASSWORD}
+DB_NAME=${DB_NAME}
+DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+
+# ElevenLabs Voice AI (optional)
+ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+
+# Hume Emotion AI (optional)
+HUME_API_KEY=${HUME_API_KEY}
+EOF
+
+    chmod 600 .env
+    echo -e "${GREEN}Environment file created${NC}"
+fi
+
+# Load environment
+source .env
+
+# =============================================================================
+# STEP 3: Create SSL Directory
+# =============================================================================
+echo -e "\n${YELLOW}[3/6] Setting up SSL...${NC}"
+
+mkdir -p ssl
+
+# Create self-signed cert for initial setup (will be replaced by Let's Encrypt)
+if [ ! -f ssl/fullchain.pem ]; then
+    echo "Creating temporary self-signed certificate..."
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout ssl/privkey.pem \
+        -out ssl/fullchain.pem \
+        -subj "/CN=${BOT_DOMAIN:-localhost}"
+    echo -e "${GREEN}SSL certificates created${NC}"
+fi
+
+# =============================================================================
+# STEP 4: Build and Start Containers
+# =============================================================================
+echo -e "\n${YELLOW}[4/6] Building and starting containers...${NC}"
+
+docker compose down 2>/dev/null || true
+docker compose build --no-cache
+docker compose up -d
+
+echo -e "${GREEN}Containers started${NC}"
+
+# Wait for services to be ready
+echo "Waiting for services to start..."
+sleep 10
+
+# =============================================================================
+# STEP 5: Set Up Webhook
+# =============================================================================
+echo -e "\n${YELLOW}[5/6] Setting up Telegram webhook...${NC}"
+
+# Determine protocol
+if [ -f ssl/fullchain.pem ]; then
+    WEBHOOK_URL="https://${BOT_DOMAIN}"
+else
+    WEBHOOK_URL="http://${BOT_DOMAIN}"
+fi
+
+# Set webhook
+echo "Setting webhook to: ${WEBHOOK_URL}/webhook"
+
+response=$(curl -s -X POST "http://localhost:8000/set-webhook" \
+    -H "Content-Type: application/json" \
+    -d "{\"url\": \"${WEBHOOK_URL}\"}")
+
+if echo "$response" | grep -q "success"; then
+    echo -e "${GREEN}Webhook set successfully${NC}"
+else
+    echo -e "${YELLOW}Webhook response: ${response}${NC}"
+    echo "You may need to set it manually after SSL is configured"
+fi
+
+# =============================================================================
+# STEP 6: Final Status
+# =============================================================================
+echo -e "\n${YELLOW}[6/6] Checking status...${NC}"
+
+# Health check
+health=$(curl -s http://localhost:8000/health 2>/dev/null || echo '{"status":"error"}')
+echo "Health check: $health"
+
+echo -e "\n${GREEN}"
+echo "╔═══════════════════════════════════════════════════════════════╗"
+echo "║                                                               ║"
+echo "║   WAYA BOT SETUP COMPLETE!                                    ║"
+echo "║                                                               ║"
+echo "╚═══════════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
+
+echo -e "${BLUE}Your bot is now running!${NC}"
+echo ""
+echo "Commands:"
+echo "  - View logs:        docker compose logs -f waya"
+echo "  - Restart bot:      docker compose restart waya"
+echo "  - Stop all:         docker compose down"
+echo "  - Start all:        docker compose up -d"
+echo ""
+echo "Webhook URL: ${WEBHOOK_URL}/webhook"
+echo ""
+echo -e "${YELLOW}NEXT STEPS:${NC}"
+echo "1. Open Telegram and message your bot"
+echo "2. Send /start to begin"
+echo ""
+
+if [ -z "$ELEVENLABS_API_KEY" ]; then
+    echo -e "${YELLOW}TIP: Add ELEVENLABS_API_KEY to .env for voice replies${NC}"
+fi
+
+echo ""
+echo -e "${GREEN}Enjoy using Waya!${NC}"

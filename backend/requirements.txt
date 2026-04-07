@@ -8,20 +8,24 @@ uvicorn[standard]>=0.27.0
 # Telegram Bot
 python-telegram-bot>=21.0
 
-# AI - Groq
+# AI - Groq (Llama 3.3 70B + Whisper)
 groq>=0.4.0
 
-# Database
+# Database - PostgreSQL
 asyncpg>=0.29.0
 
 # Configuration
+pydantic>=2.0.0
 pydantic-settings>=2.1.0
 
 # HTTP Client
 httpx>=0.26.0
 
-# Optional: Voice AI (ElevenLabs)
-# elevenlabs>=1.0.0
-
-# Optional: Scheduling
+# Scheduling (for reminders)
 apscheduler>=3.10.0
+
+# Voice AI - ElevenLabs (optional)
+elevenlabs>=1.0.0
+
+# Emotion AI - Hume (optional)
+hume>=0.5.0
