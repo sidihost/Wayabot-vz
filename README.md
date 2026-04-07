@@ -2,48 +2,80 @@
 
 An intelligent Telegram bot that helps users create custom bots, set reminders, take notes, manage tasks, and chat with AI. Powered by Groq AI for lightning-fast responses with real-time streaming.
 
-## Features
+## What Makes Waya Special
 
-- **AI Chat with Streaming** - Real-time typing effect as AI responds
-- **Advanced Bot Builder** - Create powerful AI bots with natural language
-  - Create with AI: Describe what you want, get a working bot
-  - Feature Cards: Select capabilities like auto-replies, scheduling, forms
-  - Template Library: 20+ pre-built bots for business, education, lifestyle
-  - Bot Management: View, edit, delete, and share your bots
-  - Knowledge Base: Train your bot with custom Q&A
-  - Automations: Auto-reply rules for keywords
-  - Export Code: Get standalone Python code for your bot
-- **Business Bots** - For Telegram Business accounts
-  - Working hours & away messages
-  - Quick replies for common questions
-  - Lead collection forms
-  - Customer support automation
-- **Channel Bots** - For channel management
-  - Schedule posts with buttons and pins
-  - Auto-post from RSS/webhooks
-  - Channel polls and quizzes
-  - Content formatting tools
-- **Polls & Quizzes** - Engagement tools
-  - Regular polls, quizzes, multi-answer
-  - Scheduled polls
-  - Anonymous or public voting
-  - Auto-closing polls
-- **Voice Messages** - Transcription with Groq Whisper + text-to-speech with ElevenLabs
+Waya is a **SaaS AI Bot Builder** that runs like an autonomous agent:
+
+- **Zero Code Required** - Users describe what they want in natural language, Waya builds it
+- **Instant Deployment** - Bots go live immediately after creation (no manual setup)
+- **Fully Autonomous** - Bots run 24/7 on our infrastructure, users never see code
+- **AI Agent Features** - Auto-reactions, smart suggestions, auto-moderation, optimal scheduling
+- **Celebration Animations** - Confetti, rockets, and checkmarks when bots are created
+
+## Core Features
+
+### AI Bot Builder (Autonomous)
+- **Natural Language Creation** - "Build me a coffee shop assistant bot"
+- **Auto-Deploy** - Bot starts running instantly on our servers
+- **Hot-Reload** - Edit bot behavior and changes apply immediately
+- **No BotFather Needed** - Bots run through Waya (users can export code later if they want their own)
+
+### AI Agent Capabilities
+| Feature | Description |
+|---------|-------------|
+| **Auto-React** | Analyzes messages and adds relevant emoji reactions automatically |
+| **Auto-Moderate** | Detects spam, floods, inappropriate content and takes action |
+| **Smart Suggestions** | AI generates reply buttons based on conversation context |
+| **Optimal Scheduling** | Learns best posting times from engagement analytics |
+
+### Voice AI (ElevenLabs)
+- Text-to-speech with 12+ premium voices
+- Voice cloning capabilities
+- Voice style customization
+
+### Emotion AI (Hume)
+- Real-time emotion detection from text
+- Empathic response mode
+- Mood tracking and wellbeing insights
+
+### Productivity Tools
 - **Smart Reminders** - Natural language ("remind me to call mom in 2 hours")
-- **Notes & Tasks** - Quick note-taking and task management
-- **AI Personalities** - Create custom AI personalities
-- **Gamification** - XP, levels, streaks, and achievements
+- **Notes** - Quick note-taking with full-text search
+- **Tasks** - Task management with priorities
 
-## Bot Builder - Full Feature List
+### Gamification
+- XP, levels, and streaks
+- Achievements and leaderboards
+- Profile stats
+
+## How Bot Creation Works
+
+```
+User: "Build me a customer support bot for my coffee shop"
+
+Waya: 
+1. AI generates bot configuration (personality, commands, responses)
+2. Bot is automatically deployed to our runtime engine
+3. Celebration animation plays (confetti + rocket + checkmark!)
+4. User gets a shareable link - bot is immediately live
+5. All AI agent features are enabled by default
+```
+
+**The user never:**
+- Sees any code
+- Needs to set up webhooks
+- Needs to go to BotFather
+- Needs to deploy anything
+
+**Everything is automatic.**
+
+## Bot Builder Commands
 
 ### Create Bots
-
 ```
 /build a coffee shop assistant bot
 /build a fitness coach that motivates users
 /build a coding tutor for Python
-/build a customer support bot for my store
-/build a quiz bot about science
 ```
 
 Or just type naturally:
@@ -54,96 +86,93 @@ make me a quiz bot about history
 ```
 
 ### Manage Bots
-
 - `/mybots` - View all your bots
-- Tap "Edit" on any bot to:
-  - Change name, personality, greeting
-  - Add custom commands
-  - Add knowledge base entries
-  - Create automation rules
-  - View analytics
-  - Export as Python code
+- Tap "Edit" to change name, personality, commands
+- Changes apply instantly (hot-reload)
 
 ### Edit via Prompt
-
-Just describe what you want to change:
 ```
 make my coffee bot more friendly
 add a pricing command to my support bot
 change the greeting to be more professional
 ```
 
-### Bot Features You Can Add
-
-| Feature | Description |
-|---------|-------------|
-| AI Chat | Smart conversations with context memory |
-| Commands | Custom /commands your bot responds to |
-| Auto Replies | Trigger responses on keywords |
-| Scheduler | Send messages at specific times |
-| Knowledge Base | Train bot with custom Q&A |
-| Buttons | Interactive menus and actions |
-| Forms | Collect user information |
-| Analytics | Track bot usage and stats |
-| Voice | Voice messages and TTS |
-| Multi-Language | Support multiple languages |
-
-### After Creation
-
-- Get a shareable link: `t.me/YourBot?start=bot_123`
-- Bot is immediately active
-- AI greets users automatically
-- Export standalone Python code to run anywhere
-
-## Polls & Quizzes
-
-Create polls instantly with `/poll`:
+## Architecture
 
 ```
-/poll What's for lunch? | Pizza | Sushi | Tacos | Salad
+┌─────────────────────────────────────────────────────────────┐
+│                      Waya Platform                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   ┌─────────────┐     ┌──────────────────┐                 │
+│   │   Telegram  │────▶│   Main Webhook   │                 │
+│   │   Messages  │     │   (main.py)      │                 │
+│   └─────────────┘     └────────┬─────────┘                 │
+│                                │                            │
+│                    ┌───────────┴───────────┐               │
+│                    ▼                       ▼               │
+│         ┌─────────────────┐    ┌─────────────────┐        │
+│         │  Bot Builder    │    │  Bot Runtime    │        │
+│         │  (bot_builder)  │    │  (bot_runtime)  │        │
+│         │                 │    │                 │        │
+│         │ - AI Generation │    │ - Auto-Deploy   │        │
+│         │ - Config Parse  │    │ - Hot-Reload    │        │
+│         │ - Celebrations  │    │ - Health Check  │        │
+│         └────────┬────────┘    └────────┬────────┘        │
+│                  │                      │                  │
+│                  └──────────┬───────────┘                  │
+│                             ▼                              │
+│         ┌─────────────────────────────────────┐           │
+│         │         AI Agent Engine             │           │
+│         │                                     │           │
+│         │  ┌───────────┐ ┌───────────────┐   │           │
+│         │  │ Auto-React│ │ Auto-Moderate │   │           │
+│         │  └───────────┘ └───────────────┘   │           │
+│         │  ┌───────────┐ ┌───────────────┐   │           │
+│         │  │Suggestions│ │ Scheduler     │   │           │
+│         │  └───────────┘ └───────────────┘   │           │
+│         └─────────────────────────────────────┘           │
+│                                                            │
+│   ┌────────────┐  ┌────────────┐  ┌────────────┐         │
+│   │ PostgreSQL │  │  Groq AI   │  │ ElevenLabs │         │
+│   │  Database  │  │  (LLama)   │  │   (Voice)  │         │
+│   └────────────┘  └────────────┘  └────────────┘         │
+│                                                            │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Or use the interactive menu for more options:
-- **Regular Poll** - Simple voting
-- **Quiz** - With correct answer and explanation
-- **Multi-Answer** - Users can select multiple options
-- **Scheduled** - Auto-close after time
+## New Backend Modules
 
-### Quiz Example
+| Module | Purpose |
+|--------|---------|
+| `bot_runtime.py` | Autonomous bot execution engine - deploys and runs all user bots |
+| `agent_engine.py` | AI agent features - auto-reactions with emotion analysis |
+| `moderation.py` | Auto-moderation - spam detection, flood control, content filtering |
+| `suggestions.py` | Smart reply suggestions with AI |
+| `content_scheduler.py` | Optimal posting time analysis and scheduling |
+| `animations.py` | Celebration effects - confetti, rockets, checkmarks |
+| `telegram_api.py` | Advanced Telegram Bot API wrapper |
+
+## API Endpoints
+
+### Health & Status
 ```
-What is 2+2? | 3 | 4 | 5 | correct=2 | explanation=Basic math!
+GET /              - Root info
+GET /health        - Health check with bot runtime status
+GET /runtime/bots  - List all running user bots
+GET /runtime/bots/{id} - Status of specific bot
 ```
 
-## Business Bots
-
-Create bots for Telegram Business accounts:
-
-1. Use `/build` and select "Business Bot"
-2. Enter your business name
-3. Configure:
-   - Working hours
-   - Away messages
-   - Quick replies for FAQs
-   - Lead collection
-
-Your bot will automatically respond when you're away and handle common customer questions.
-
-## Channel Bots
-
-Create bots to manage your channels:
-
-1. Use `/build` and select "Channel Bot"
-2. Describe your channel content
-3. Add the bot as admin to your channel
-4. Features:
-   - Schedule posts with buttons
-   - Create channel polls
-   - Auto-post from RSS feeds
-   - Pin important messages
+### Webhooks
+```
+POST /webhook      - Telegram webhook endpoint
+POST /set-webhook  - Configure webhook URL
+GET  /webhook-info - Current webhook configuration
+```
 
 ---
 
-## Deploy to DigitalOcean (3 Options)
+## Deploy to DigitalOcean
 
 ### Option 1: One-Click Docker Setup (Easiest)
 
@@ -165,13 +194,7 @@ chmod +x setup.sh
 sudo ./setup.sh
 ```
 
-The script gives you two options:
-1. **Import from Vercel** - If you have env vars in Vercel, it will pull them automatically
-2. **Enter manually** - Walk through each API key step by step
-
----
-
-### Option 2: Docker Compose (Manual)
+### Option 2: Docker Compose
 
 ```bash
 # SSH into your droplet
@@ -188,48 +211,11 @@ cd Wayabot-vz
 cp .env.example .env
 nano .env   # Add your API keys
 
-# Start everything (webhook auto-configures if BOT_DOMAIN is set!)
+# Start everything
 docker compose up -d
 
-# Check logs to verify webhook is set
+# Check logs
 docker compose logs -f wayabot
-```
-
----
-
-### Option 3: Manual Setup (No Docker)
-
-```bash
-# SSH into droplet
-ssh root@your-droplet-ip
-
-# Install dependencies
-apt update && apt install -y python3.11 python3.11-venv python3-pip postgresql postgresql-contrib
-
-# Setup PostgreSQL
-sudo -u postgres psql << EOF
-CREATE USER waya WITH PASSWORD 'wayabot123';
-CREATE DATABASE wayabot OWNER waya;
-EOF
-
-# Clone repo
-git clone https://github.com/sidihost/Wayabot-vz.git
-cd Wayabot-vz/backend
-
-# Create virtual environment
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Create .env
-cat > .env << EOF
-TELEGRAM_BOT_TOKEN=your_token_here
-GROQ_API_KEY=your_key_here
-DATABASE_URL=postgresql://waya:wayabot123@localhost:5432/wayabot
-EOF
-
-# Run
-uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ---
@@ -241,7 +227,9 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 1. Open Telegram, search for `@BotFather`
 2. Send `/newbot`
 3. Follow the prompts to name your bot
-4. Copy the token (looks like: `123456789:ABCdefGHI...`)
+4. Copy the token
+
+**Note:** This is for the main Waya bot. User-created bots run through Waya's infrastructure and don't need separate tokens.
 
 ### 2. Groq API Key (Required)
 
@@ -249,24 +237,20 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 2. Sign up / Log in
 3. Go to **API Keys** in the sidebar
 4. Click **Create API Key**
-5. Copy the key
 
 ### 3. ElevenLabs API Key (Optional - Voice)
 
 1. Go to [elevenlabs.io](https://elevenlabs.io)
-2. Sign up and go to your profile
-3. Copy your API key
+2. Sign up and copy your API key
 
 ### 4. Hume AI API Key (Optional - Emotions)
 
 1. Go to [hume.ai](https://hume.ai)
-2. Sign up and get API key from dashboard
+2. Sign up and get API key
 
 ---
 
 ## Environment Variables
-
-Create a `.env` file with these variables:
 
 ```env
 # REQUIRED
@@ -274,32 +258,12 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 GROQ_API_KEY=your_groq_api_key
 DATABASE_URL=postgresql://waya:wayabot123@postgres:5432/wayabot
 
-# For Docker Compose
-DB_USER=waya
-DB_PASSWORD=wayabot123
-DB_NAME=wayabot
+# For auto-webhook setup
+BOT_DOMAIN=your-domain.com
 
 # OPTIONAL
 ELEVENLABS_API_KEY=your_elevenlabs_key
 HUME_API_KEY=your_hume_key
-```
-
----
-
-## Setting Up Webhook
-
-After the bot is running, set up the Telegram webhook:
-
-```bash
-# With your domain (HTTPS)
-curl -X POST https://waya.qzz.io/set-webhook \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://waya.qzz.io"}'
-```
-
-Check webhook status:
-```bash
-curl https://waya.qzz.io/webhook-info
 ```
 
 ---
@@ -314,123 +278,69 @@ curl https://waya.qzz.io/webhook-info
 | `/build <description>` | Create a custom bot |
 | `/mybots` | List your bots |
 | `/remind <text>` | Set a reminder |
-| `/reminders` | View reminders |
 | `/note <text>` | Save a note |
-| `/notes` | View notes |
 | `/task <text>` | Create a task |
-| `/tasks` | View tasks |
 | `/voice` | Toggle voice mode |
-| `/voices` | Available voices |
-| `/setvoice <name>` | Set your voice |
 | `/profile` | Your stats |
-| `/settings` | Bot settings |
 
-### Smart Natural Language
+### Natural Language (No Commands Needed)
 
-Just type naturally - no commands needed:
-
+Just type naturally:
 - `"remind me to call mom tomorrow at 3pm"`
 - `"note: meeting ideas for the project"`
-- `"task: buy groceries"`
 - `"create a customer support bot for my coffee shop"`
 
 ---
 
-## Useful Commands
+## Project Structure
 
-```bash
-# View logs
-docker compose logs -f waya
-
-# Restart bot
-docker compose restart waya
-
-# Stop everything
-docker compose down
-
-# Start everything
-docker compose up -d
-
-# Check health
-curl http://localhost:8000/health
-
-# Check bot info
-curl http://localhost:8000/bot-info
+```
+Wayabot-vz/
+├── backend/
+│   ├── main.py              # FastAPI app & webhooks
+│   ├── handlers.py          # Telegram handlers
+│   ├── bot_builder.py       # Bot creation engine
+│   ├── bot_runtime.py       # Autonomous bot execution
+│   ├── agent_engine.py      # Auto-reactions & AI agent
+│   ├── moderation.py        # Auto-moderation system
+│   ├── suggestions.py       # Smart reply suggestions
+│   ├── content_scheduler.py # Optimal posting times
+│   ├── animations.py        # Celebration effects
+│   ├── telegram_api.py      # Advanced Telegram API
+│   ├── ai_engine.py         # Groq AI (Llama 3.3)
+│   ├── voice_engine.py      # ElevenLabs TTS
+│   ├── emotion_engine.py    # Hume AI emotions
+│   ├── database.py          # PostgreSQL
+│   ├── scheduler.py         # Reminders
+│   └── config.py            # Settings
+├── docker-compose.yml       # Docker setup
+├── Dockerfile               # Bot container
+├── setup.sh                 # One-click setup
+└── README.md                # This file
 ```
 
 ---
 
-## Production Setup with SSL
+## Database Schema (New Agent Tables)
 
-For HTTPS (required for production webhooks):
+```sql
+-- Bot agent settings
+bot_agent_settings (bot_id, auto_react_enabled, auto_moderate_enabled, ...)
 
-```bash
-# Install Nginx and Certbot
-apt install nginx certbot python3-certbot-nginx -y
+-- Scheduled content queue
+scheduled_content (id, bot_id, content, scheduled_at, optimal_score, ...)
 
-# Create Nginx config
-cat > /etc/nginx/sites-available/wayabot << 'EOF'
-server {
-    listen 80;
-    server_name waya.qzz.io;
+-- Moderation logs
+moderation_logs (id, bot_id, action_type, reason, confidence_score, ...)
 
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-EOF
+-- Engagement analytics
+engagement_analytics (bot_id, hour_of_day, day_of_week, engagement_score, ...)
 
-# Enable site
-ln -s /etc/nginx/sites-available/wayabot /etc/nginx/sites-enabled/
-nginx -t && systemctl restart nginx
+-- Auto-reaction history
+auto_reactions (id, bot_id, reaction_emoji, detected_emotion, ...)
 
-# Get SSL certificate
-certbot --nginx -d waya.qzz.io
-
-# Set webhook with HTTPS
-curl -X POST https://waya.qzz.io/set-webhook \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://waya.qzz.io"}'
-```
-
----
-
-## Running as a Service (systemd)
-
-```bash
-# Create service file
-cat > /etc/systemd/system/wayabot.service << 'EOF'
-[Unit]
-Description=Waya Telegram Bot
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/root/Wayabot-vz/backend
-EnvironmentFile=/root/Wayabot-vz/backend/.env
-ExecStart=/root/Wayabot-vz/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable and start
-systemctl daemon-reload
-systemctl enable wayabot
-systemctl start wayabot
-
-# Check status
-systemctl status wayabot
-
-# View logs
-journalctl -u wayabot -f
+-- Smart suggestion tracking
+suggestion_usage (id, bot_id, suggestion_text, was_used, ...)
 ```
 
 ---
@@ -441,58 +351,22 @@ journalctl -u wayabot -f
 ```bash
 # Check if running
 docker compose ps
-# or
-systemctl status wayabot
 
 # Check logs
-docker compose logs -f waya
-# or
-journalctl -u wayabot -f
+docker compose logs -f wayabot
 
-# Verify webhook
-curl http://localhost:8000/webhook-info
+# Check bot runtime status
+curl http://localhost:8000/runtime/bots
 ```
 
-### Database connection error?
+### User bots not working?
 ```bash
-# Check PostgreSQL
-docker compose ps postgres
-# or
-systemctl status postgresql
+# Check runtime engine status
+curl http://localhost:8000/health
 
-# Test connection
-psql -U waya -d wayabot -h localhost
-```
-
-### Model not found error?
-The bot uses `llama-3.3-70b-versatile`. Make sure your Groq API key is valid at [console.groq.com](https://console.groq.com).
-
-### Voice not working?
-1. Add `ELEVENLABS_API_KEY` to your `.env`
-2. Restart: `docker compose restart waya`
-
----
-
-## Project Structure
-
-```
-Wayabot-vz/
-├── backend/
-│   ├── main.py           # FastAPI app & webhooks
-│   ├── handlers.py       # Telegram handlers
-│   ├── ai_engine.py      # Groq AI (Llama 3.3)
-│   ├── voice_engine.py   # ElevenLabs TTS
-│   ├── emotion_engine.py # Hume AI emotions
-│   ├── database.py       # PostgreSQL
-│   ├── scheduler.py      # Reminders
-│   ├── config.py         # Settings
-│   └── requirements.txt  # Python deps
-├── docker-compose.yml    # Docker setup
-├── Dockerfile           # Bot container
-├── nginx.conf           # Reverse proxy
-├── setup.sh             # One-click setup
-├── .env.example         # Env template
-└── README.md            # This file
+# Should show:
+# "bot_runtime": "running"
+# "active_bots": <number>
 ```
 
 ---

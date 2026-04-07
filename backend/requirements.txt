@@ -20,6 +20,7 @@ pydantic-settings>=2.1.0
 
 # HTTP Client
 httpx>=0.26.0
+aiohttp>=3.9.0
 
 # Scheduling (for reminders)
 apscheduler>=3.10.0

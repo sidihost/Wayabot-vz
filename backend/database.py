@@ -663,6 +663,143 @@ async def _init_schema():
                 UNIQUE(user_id, date)
             );
             CREATE INDEX IF NOT EXISTS idx_daily_emotion_user ON emotional_daily_summary(user_id, date DESC);
+            
+            -- =====================================================
+            -- AI AGENT FEATURES
+            -- =====================================================
+            
+            -- Bot agent settings (per-bot AI agent configuration)
+            CREATE TABLE IF NOT EXISTS bot_agent_settings (
+                bot_id INT PRIMARY KEY REFERENCES custom_bots(id) ON DELETE CASCADE,
+                auto_react_enabled BOOLEAN DEFAULT TRUE,
+                auto_moderate_enabled BOOLEAN DEFAULT FALSE,
+                auto_suggest_enabled BOOLEAN DEFAULT TRUE,
+                auto_schedule_enabled BOOLEAN DEFAULT FALSE,
+                reaction_style VARCHAR(50) DEFAULT 'expressive',
+                moderation_level VARCHAR(20) DEFAULT 'medium',
+                suggestion_count INT DEFAULT 3,
+                settings JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            
+            -- Scheduled content queue (AI-optimized posting)
+            CREATE TABLE IF NOT EXISTS scheduled_content (
+                id SERIAL PRIMARY KEY,
+                bot_id INT REFERENCES custom_bots(id) ON DELETE CASCADE,
+                user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+                chat_id BIGINT NOT NULL,
+                content TEXT NOT NULL,
+                content_type VARCHAR(20) DEFAULT 'text',
+                media_url TEXT,
+                scheduled_at TIMESTAMPTZ NOT NULL,
+                optimal_score DECIMAL(5,2),
+                is_sent BOOLEAN DEFAULT FALSE,
+                is_cancelled BOOLEAN DEFAULT FALSE,
+                sent_at TIMESTAMPTZ,
+                engagement_count INT DEFAULT 0,
+                error_message TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_scheduled_content_pending ON scheduled_content(scheduled_at) WHERE is_sent = FALSE AND is_cancelled = FALSE;
+            CREATE INDEX IF NOT EXISTS idx_scheduled_content_bot ON scheduled_content(bot_id);
+            
+            -- Moderation logs (auto-moderation actions)
+            CREATE TABLE IF NOT EXISTS moderation_logs (
+                id SERIAL PRIMARY KEY,
+                bot_id INT REFERENCES custom_bots(id) ON DELETE CASCADE,
+                chat_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                message_id BIGINT,
+                action_type VARCHAR(50) NOT NULL,
+                reason TEXT,
+                message_content TEXT,
+                confidence_score DECIMAL(5,4),
+                auto_action_taken VARCHAR(50),
+                is_false_positive BOOLEAN DEFAULT FALSE,
+                reviewed_by BIGINT,
+                reviewed_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_moderation_bot ON moderation_logs(bot_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_moderation_user ON moderation_logs(user_id);
+            CREATE INDEX IF NOT EXISTS idx_moderation_chat ON moderation_logs(chat_id);
+            
+            -- Engagement analytics (track optimal posting times)
+            CREATE TABLE IF NOT EXISTS engagement_analytics (
+                id SERIAL PRIMARY KEY,
+                bot_id INT REFERENCES custom_bots(id) ON DELETE CASCADE,
+                chat_id BIGINT NOT NULL,
+                hour_of_day INT NOT NULL CHECK (hour_of_day >= 0 AND hour_of_day < 24),
+                day_of_week INT NOT NULL CHECK (day_of_week >= 0 AND day_of_week < 7),
+                message_count INT DEFAULT 0,
+                reaction_count INT DEFAULT 0,
+                reply_count INT DEFAULT 0,
+                avg_response_time_ms INT DEFAULT 0,
+                engagement_score DECIMAL(5,2) DEFAULT 0,
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(bot_id, chat_id, hour_of_day, day_of_week)
+            );
+            CREATE INDEX IF NOT EXISTS idx_engagement_bot ON engagement_analytics(bot_id);
+            CREATE INDEX IF NOT EXISTS idx_engagement_chat ON engagement_analytics(chat_id);
+            
+            -- Auto-reaction history (track what reactions were sent)
+            CREATE TABLE IF NOT EXISTS auto_reactions (
+                id SERIAL PRIMARY KEY,
+                bot_id INT REFERENCES custom_bots(id) ON DELETE CASCADE,
+                chat_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                reaction_emoji VARCHAR(20) NOT NULL,
+                detected_emotion VARCHAR(50),
+                confidence_score DECIMAL(5,4),
+                message_preview TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_auto_reactions_bot ON auto_reactions(bot_id, created_at DESC);
+            
+            -- Suggestion usage tracking (learn which suggestions work)
+            CREATE TABLE IF NOT EXISTS suggestion_usage (
+                id SERIAL PRIMARY KEY,
+                bot_id INT REFERENCES custom_bots(id) ON DELETE CASCADE,
+                chat_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                suggestion_text TEXT NOT NULL,
+                was_used BOOLEAN DEFAULT FALSE,
+                context_hash VARCHAR(64),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_suggestion_bot ON suggestion_usage(bot_id);
+            
+            -- Spam patterns cache (learned spam patterns)
+            CREATE TABLE IF NOT EXISTS spam_patterns (
+                id SERIAL PRIMARY KEY,
+                pattern_type VARCHAR(50) NOT NULL,
+                pattern_value TEXT NOT NULL,
+                severity VARCHAR(20) DEFAULT 'medium',
+                match_count INT DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_by BIGINT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(pattern_type, pattern_value)
+            );
+            CREATE INDEX IF NOT EXISTS idx_spam_patterns_type ON spam_patterns(pattern_type) WHERE is_active = TRUE;
+            
+            -- User warnings (moderation warnings per user)
+            CREATE TABLE IF NOT EXISTS user_warnings (
+                id SERIAL PRIMARY KEY,
+                bot_id INT REFERENCES custom_bots(id) ON DELETE CASCADE,
+                chat_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                warning_type VARCHAR(50) NOT NULL,
+                reason TEXT,
+                warning_count INT DEFAULT 1,
+                last_warning_at TIMESTAMPTZ DEFAULT NOW(),
+                expires_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(bot_id, chat_id, user_id, warning_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_warnings_lookup ON user_warnings(bot_id, chat_id, user_id);
         ''')
         
         # Insert default bot templates

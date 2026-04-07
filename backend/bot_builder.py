@@ -23,6 +23,9 @@ from telegram.constants import ParseMode, ChatAction
 
 from ai_engine import generate_response, get_groq_client, BEST_MODEL
 import database as db
+from agent_engine import initialize_agent_settings
+from bot_runtime import auto_deploy_bot, auto_update_bot
+from animations import celebrate_bot_creation, CelebrationType
 
 
 # =============================================================================
@@ -704,6 +707,13 @@ async def create_bot_with_ai(
         await db.set_active_bot(user_id, bot_id)
         await db.add_xp(user_id, 30)
         
+        # Initialize AI agent settings for the new bot
+        await initialize_agent_settings(bot_id)
+        
+        # AUTO-DEPLOY: Bot goes live instantly on our infrastructure
+        # User never sees code - it just works!
+        deploy_result = await auto_deploy_bot(bot_id)
+        
         # Get share link
         try:
             bot_info = await context.bot.get_me()
@@ -713,11 +723,24 @@ async def create_bot_with_ai(
         
         share_link = f"https://t.me/{bot_username}?start=bot_{bot_id}"
         
+        # Play celebration animation (confetti, rocket, checkmark - all of them!)
+        chat_id = update.effective_chat.id
+        asyncio.create_task(
+            celebrate_bot_creation(
+                bot_token=context.bot.token,
+                chat_id=chat_id,
+                bot_name=config.get('name', 'Your Bot'),
+                celebration_type=CelebrationType.ALL  # All animations!
+            )
+        )
+        
         return {
             "success": True,
             "bot_id": bot_id,
             "config": config,
-            "share_link": share_link
+            "share_link": share_link,
+            "deployed": deploy_result.get("success", False),
+            "status": "running"  # Bot is immediately live!
         }
         
     except Exception as e:
@@ -822,9 +845,14 @@ Return ONLY valid JSON with the changes."""
                 bot_id
             )
         
+        # HOT-RELOAD: Update running bot instantly without restart
+        # Changes take effect immediately - user sees updated behavior right away
+        await auto_update_bot(bot_id)
+        
         return {
             "success": True,
-            "changes": changes.get('changes_summary', 'Bot updated successfully')
+            "changes": changes.get('changes_summary', 'Bot updated successfully'),
+            "hot_reloaded": True  # Changes are live immediately!
         }
         
     except Exception as e:

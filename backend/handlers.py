@@ -176,6 +176,19 @@ import bot_builder
 from voice_engine import voice_engine, voice_preferences, VoiceEngine
 from emotion_engine import emotion_engine, EmotionEngine
 
+# AI Agent Features
+from agent_engine import (
+    auto_react_to_message, 
+    get_agent_settings, 
+    initialize_agent_settings,
+    track_engagement,
+    AgentSettings
+)
+from moderation import moderate_message, ModerationLevel
+from suggestions import generate_suggestions, send_message_with_suggestions
+from animations import play_bot_creation_celebration, play_milestone_celebration
+from telegram_api import get_telegram_api
+
 
 # Minimum interval between message edits to avoid Telegram rate limits
 STREAM_UPDATE_INTERVAL = 0.8  # seconds
@@ -1121,6 +1134,9 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Make it active!
     await db.set_active_bot(user_id, bot_id)
     await db.add_xp(user_id, 30)
+    
+    # Initialize AI agent settings for the new bot
+    await initialize_agent_settings(bot_id)
     
     # Get bot username for shareable link
     try:
@@ -2545,8 +2561,49 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if session and session.get('active_bot_id'):
         bot = await db.get_bot(session['active_bot_id'])
         if bot:
-            await db.increment_bot_usage(bot['id'])
+            bot_id = bot['id']
+            chat_id = update.effective_chat.id
+            message_id = update.message.message_id
+            
+            await db.increment_bot_usage(bot_id)
             system_prompt = bot.get('system_prompt', WAYA_SYSTEM_PROMPT)
+            
+            # Get AI agent settings for this bot
+            agent_settings = await get_agent_settings(bot_id)
+            
+            # Auto-react to user message (if enabled)
+            if agent_settings.auto_react_enabled:
+                try:
+                    # We need the main bot's token for reactions
+                    bot_token = context.bot.token
+                    asyncio.create_task(auto_react_to_message(
+                        bot_token=bot_token,
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        message_text=message_text,
+                        bot_id=bot_id,
+                        reaction_style=agent_settings.reaction_style
+                    ))
+                except Exception as e:
+                    pass  # Don't fail on reaction errors
+            
+            # Check moderation (if enabled for groups)
+            if agent_settings.auto_moderate_enabled and update.effective_chat.type in ['group', 'supergroup']:
+                try:
+                    moderation_result = await moderate_message(
+                        bot_token=context.bot.token,
+                        bot_id=bot_id,
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        user_id=user_id,
+                        message_text=message_text,
+                        moderation_level=ModerationLevel(agent_settings.moderation_level)
+                    )
+                    if moderation_result.is_violation:
+                        # Message was handled by moderation, stop processing
+                        return
+                except Exception as e:
+                    pass  # Don't fail on moderation errors
             
             history = await db.get_conversation_history(user_id, limit=10)
             await db.add_conversation(user_id, "user", message_text)
@@ -2563,6 +2620,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await db.add_conversation(user_id, "assistant", response)
             await db.increment_stat(user_id, "total_ai_requests")
             await db.increment_stat(user_id, "total_bot_interactions")
+            
+            # Track engagement for optimal scheduling
+            asyncio.create_task(track_engagement(bot_id, chat_id))
+            
+            # Generate smart suggestions (if enabled)
+            if agent_settings.auto_suggest_enabled:
+                try:
+                    suggestion_result = await generate_suggestions(
+                        message_text=message_text,
+                        conversation_context=[{"role": "assistant", "content": response}],
+                        count=agent_settings.suggestion_count,
+                        use_ai=True
+                    )
+                    
+                    if suggestion_result.suggestions:
+                        # Build suggestion buttons
+                        keyboard = []
+                        for i, sug in enumerate(suggestion_result.suggestions[:3]):
+                            keyboard.append([InlineKeyboardButton(
+                                sug.text[:32], 
+                                callback_data=f"sug_{bot_id}_{i}"
+                            )])
+                        
+                        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+                        await safe_reply_text(
+                            update.message, response, 
+                            parse_mode=ParseMode.MARKDOWN,
+                            reply_markup=reply_markup
+                        )
+                        return
+                except Exception as e:
+                    pass  # Fall back to normal response
             
             # Use safe_reply_text for potentially long AI responses
             await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
