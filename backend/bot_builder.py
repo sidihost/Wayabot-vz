@@ -23,6 +23,7 @@ from telegram.constants import ParseMode, ChatAction
 
 from ai_engine import generate_response, get_groq_client, BEST_MODEL
 import database as db
+from agent_engine import initialize_agent_settings
 
 
 # =============================================================================
@@ -703,6 +704,9 @@ async def create_bot_with_ai(
         # Set as active bot
         await db.set_active_bot(user_id, bot_id)
         await db.add_xp(user_id, 30)
+        
+        # Initialize AI agent settings for the new bot
+        await initialize_agent_settings(bot_id)
         
         # Get share link
         try:
