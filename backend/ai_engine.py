@@ -9,15 +9,15 @@ from typing import Optional, Dict, Any, List
 from groq import AsyncGroq
 from datetime import datetime
 
-# 🏆 BEST Groq Models
-BEST_MODEL = "groq/llama-4-scout"  # FASTEST & SMARTEST!
-REASONING_MODEL = "groq/deepseek-r1"
+# 🏆 BEST Groq Models - Use actual model names (not prefixed)
+BEST_MODEL = "llama-3.3-70b-versatile"  # FASTEST & SMARTEST!
+REASONING_MODEL = "llama-3.3-70b-versatile"  # Use same model for reasoning
 
 # 🎙 Whisper - FASTEST transcription
 WHISPER_MODEL = "whisper-large-v3-turbo"
 
-# 🤖 COMPOUND - Agentic AI with TOOLS!
-COMPOUND_MODEL = "groq/compound"  # Web search + code execution!
+# 🤖 Fallback model for compound tasks
+COMPOUND_MODEL = "llama-3.3-70b-versatile"  # Use main model as fallback
 
 
 async def compound_response(user_message: str, conversation_history: list = None) -> str:
@@ -78,9 +78,15 @@ async def transcribe_voice(audio_bytes: bytes, prompt: str = None) -> str:
             response_format="text",
             temperature=0.0
         )
-        return transcription.text
+        # Handle different response formats
+        if isinstance(transcription, str):
+            return transcription
+        elif hasattr(transcription, 'text'):
+            return transcription.text
+        else:
+            return str(transcription)
     except Exception as e:
-        print(f"Whisper error: {e}")
+        print(f"Whisper transcription error: {e}")
         return None
 
 

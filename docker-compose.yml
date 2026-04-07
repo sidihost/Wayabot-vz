@@ -1,0 +1,87 @@
+# Waya Telegram Bot - Docker Compose for DigitalOcean
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: waya-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-waya}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-wayabot123}
+      POSTGRES_DB: ${DB_NAME:-wayabot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-waya} -d ${DB_NAME:-wayabot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Waya Bot Application
+  waya:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: waya-bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database - connects to local postgres container
+      DATABASE_URL: postgresql://${DB_USER:-waya}:${DB_PASSWORD:-wayabot123}@postgres:5432/${DB_NAME:-wayabot}
+      
+      # Required - Telegram Bot
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      
+      # Required - Groq AI
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      
+      # Optional - Voice AI (ElevenLabs)
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      
+      # Optional - Emotion AI (Hume)
+      HUME_API_KEY: ${HUME_API_KEY:-}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy (for SSL)
+  nginx:
+    image: nginx:alpine
+    container_name: waya-nginx
+    restart: unless-stopped
+    depends_on:
+      - waya
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - certbot_data:/var/www/certbot:ro
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # Certbot for SSL certificates
+  certbot:
+    image: certbot/certbot
+    container_name: waya-certbot
+    volumes:
+      - certbot_data:/var/www/certbot
+      - ./ssl:/etc/letsencrypt
+
+volumes:
+  postgres_data:
+  certbot_data:

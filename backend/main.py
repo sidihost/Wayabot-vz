@@ -32,6 +32,7 @@ Version: 2.0.0
 """
 
 import os
+import sys
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -57,6 +58,7 @@ from handlers import (
     note_command, notes_command, search_notes_command, del_note_command,
     task_command, tasks_command, done_command, del_task_command,
     build_command, my_bots_command, templates_command, activate_bot_command,
+    bots_menu_command, edit_bot_command,  # New bot builder commands
     chat_command, clear_command, translate_command, summarize_command, quiz_command,
     personalities_command, new_personality_command, set_personality_command,
     poll_command, poll_results_command,
@@ -120,9 +122,11 @@ async def setup_telegram_app() -> Application:
         
         # Bot Building
         ("build", build_command),
+        ("bots", bots_menu_command),  # New - shows full bot builder menu
         ("mybots", my_bots_command),
         ("templates", templates_command),
         ("usebot", activate_bot_command),
+        ("editbot", edit_bot_command),  # New - edit bot via prompt
         
         # AI Chat
         ("chat", chat_command),
@@ -207,6 +211,26 @@ async def lifespan(app: fastapi.FastAPI):
         scheduler = WayaScheduler(telegram_app.bot)
         await scheduler.start()
         print("✅ Reminder scheduler started")
+        
+        # Auto-setup webhook if BOT_DOMAIN is set
+        bot_domain = os.environ.get("BOT_DOMAIN")
+        if bot_domain:
+            try:
+                webhook_url = f"https://{bot_domain}/webhook"
+                result = await telegram_app.bot.set_webhook(
+                    url=webhook_url,
+                    allowed_updates=["message", "callback_query", "poll", "poll_answer"]
+                )
+                if result:
+                    print(f"✅ Webhook auto-configured: {webhook_url}")
+                else:
+                    print(f"⚠️ Webhook setup returned False for: {webhook_url}")
+            except Exception as we:
+                print(f"⚠️ Auto-webhook failed: {we}")
+                print("   You can manually set it via POST /set-webhook")
+        else:
+            print("ℹ️ BOT_DOMAIN not set - webhook must be configured manually")
+            print("   POST /set-webhook with {'url': 'https://your-domain.com'}")
         
     except ValueError as e:
         print(f"⚠️ Telegram setup skipped: {e}")
@@ -576,6 +600,66 @@ async def get_user_info(user_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def run_polling():
+    """Run bot in polling mode (for local development without webhook)."""
+    global telegram_app, scheduler
+    
+    print("=" * 50)
+    print("Starting Waya Bot in POLLING mode")
+    print("=" * 50)
+    
+    # Initialize database
+    await db.init_db()
+    print("Database initialized")
+    
+    # Set up Telegram app
+    telegram_app = await setup_telegram_app()
+    await telegram_app.initialize()
+    
+    bot_info = await telegram_app.bot.get_me()
+    print(f"Bot: @{bot_info.username}")
+    
+    # Start scheduler
+    scheduler = WayaScheduler(telegram_app.bot)
+    await scheduler.start()
+    print("Scheduler started")
+    
+    # Delete any existing webhook
+    await telegram_app.bot.delete_webhook(drop_pending_updates=True)
+    print("Webhook cleared, starting polling...")
+    
+    # Start polling
+    await telegram_app.start()
+    await telegram_app.updater.start_polling(drop_pending_updates=True)
+    
+    print("=" * 50)
+    print("Bot is running! Press Ctrl+C to stop.")
+    print("=" * 50)
+    
+    # Keep running
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        print("\nStopping...")
+    finally:
+        await telegram_app.updater.stop()
+        await telegram_app.stop()
+        await telegram_app.shutdown()
+        if scheduler:
+            await scheduler.stop()
+        await db.close_db()
+        print("Bot stopped!")
+
+
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import sys
+    import asyncio
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--polling":
+        # Run in polling mode for local development
+        asyncio.run(run_polling())
+    else:
+        # Run FastAPI server for webhook mode (production)
+        import uvicorn
+        uvicorn.run(app, host="0.0.0.0", port=8000)
