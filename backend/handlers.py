@@ -2203,13 +2203,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             
             await db.clear_session_state(user_id)
+            await db.set_active_bot(user_id, bot_id)  # Auto-activate
             await db.add_xp(user_id, 20)
             
+            bot_name = template.get('name', 'Custom Bot')
+            keyboard = [
+                [InlineKeyboardButton("💬 Start Chatting", callback_data="start_chat")],
+                [InlineKeyboardButton("📝 My Bots", callback_data="menu_mybots")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
             await query.message.reply_text(
-                f"✅ *Bot Created!*\n\n"
-                f"*{template.get('name')}* is ready!\n\n"
-                f"Use: `/usebot {bot_id}`",
-                parse_mode=ParseMode.MARKDOWN
+                f"✅ *{bot_name}* Created Successfully!\n\n"
+                f"Your bot is now active and ready to chat!\n\n"
+                f"*How to use:*\n"
+                f"• Send any message to start chatting\n"
+                f"• Use `/mybots` to manage your bots\n"
+                f"• Use `/usebot {bot_id}` to switch bots\n\n"
+                f"Bot ID: `{bot_id}`",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
             )
     
     elif data == "show_all_templates":
