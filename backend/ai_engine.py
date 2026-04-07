@@ -9,15 +9,15 @@ from typing import Optional, Dict, Any, List
 from groq import AsyncGroq
 from datetime import datetime
 
-# 🏆 BEST Groq Models
-BEST_MODEL = "groq/llama-4-scout"  # FASTEST & SMARTEST!
-REASONING_MODEL = "groq/deepseek-r1"
+# 🏆 BEST Groq Models - Use actual model names (not prefixed)
+BEST_MODEL = "llama-3.3-70b-versatile"  # FASTEST & SMARTEST!
+REASONING_MODEL = "llama-3.3-70b-versatile"  # Use same model for reasoning
 
 # 🎙 Whisper - FASTEST transcription
 WHISPER_MODEL = "whisper-large-v3-turbo"
 
-# 🤖 COMPOUND - Agentic AI with TOOLS!
-COMPOUND_MODEL = "groq/compound"  # Web search + code execution!
+# 🤖 Fallback model for compound tasks
+COMPOUND_MODEL = "llama-3.3-70b-versatile"  # Use main model as fallback
 
 
 async def compound_response(user_message: str, conversation_history: list = None) -> str:

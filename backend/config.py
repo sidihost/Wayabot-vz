@@ -45,7 +45,7 @@ class Settings(BaseSettings):
         description="Default ElevenLabs voice"
     )
     elevenlabs_model: str = Field(
-        default="eleven_flash_2_0",  # FASTEST - turbo model!
+        default="eleven_turbo_v2_5",  # Fast multilingual model
         description="ElevenLabs turbo model for instant responses"
     )
     

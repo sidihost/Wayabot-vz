@@ -72,6 +72,18 @@ async def send_buttons_message(update: Update, text: str, buttons: list):
 # Telegram message limit is 4096 characters
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
 
+
+def clean_markdown_for_telegram(text: str) -> str:
+    """
+    Clean markdown to be Telegram-compatible.
+    Telegram uses a subset of markdown - convert ** to * for bold.
+    """
+    import re
+    # Convert **text** to *text* for Telegram bold
+    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
+    return text
+
+
 async def safe_reply_text(message, text: str, parse_mode=None, reply_markup=None, **kwargs):
     """
     Safely send a message, splitting it if it exceeds Telegram's 4096 character limit.
@@ -82,6 +94,10 @@ async def safe_reply_text(message, text: str, parse_mode=None, reply_markup=None
     
     if not text:
         text = "..."
+    
+    # Clean markdown for Telegram compatibility if using markdown
+    if parse_mode == ParseMode.MARKDOWN:
+        text = clean_markdown_for_telegram(text)
     
     # If message is within limit, send normally
     if len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH:
@@ -163,11 +179,12 @@ from emotion_engine import emotion_engine, EmotionEngine
 # Minimum interval between message edits to avoid Telegram rate limits
 STREAM_UPDATE_INTERVAL = 0.8  # seconds
 
+
 async def stream_response_to_message(
     message,
     response_generator,
     initial_text: str = "...",
-    typing_indicator: str = " ▌"
+    typing_indicator: str = " |"
 ):
     """
     Stream AI response with a typing effect by editing the message.
@@ -198,6 +215,7 @@ async def stream_response_to_message(
                 try:
                     # Truncate if too long for a single message
                     display_text = full_response[:4000] if len(full_response) > 4000 else full_response
+                    # Clean markdown for intermediate updates (no parse_mode to avoid errors)
                     await sent_msg.edit_text(display_text + typing_indicator)
                     last_update_time = current_time
                     last_text_length = len(full_response)
@@ -205,18 +223,20 @@ async def stream_response_to_message(
                     # Ignore edit errors (rate limit, message unchanged, etc.)
                     pass
         
-        # Final update without typing indicator
+        # Final update without typing indicator - clean the markdown
         if full_response:
+            # Clean markdown for Telegram compatibility
+            clean_response = clean_markdown_for_telegram(full_response)
             try:
                 # Handle long messages
-                if len(full_response) > TELEGRAM_MAX_MESSAGE_LENGTH:
+                if len(clean_response) > TELEGRAM_MAX_MESSAGE_LENGTH:
                     # Delete the streaming message and use safe_reply_text for long content
                     await sent_msg.delete()
-                    await safe_reply_text(message, full_response, parse_mode=ParseMode.MARKDOWN)
+                    await safe_reply_text(message, clean_response, parse_mode=ParseMode.MARKDOWN)
                 else:
-                    await sent_msg.edit_text(full_response, parse_mode=ParseMode.MARKDOWN)
+                    await sent_msg.edit_text(clean_response, parse_mode=ParseMode.MARKDOWN)
             except Exception:
-                # If markdown fails, try without
+                # If markdown fails, try without parse_mode
                 try:
                     await sent_msg.edit_text(full_response)
                 except:
@@ -1879,7 +1899,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Handle voice messages - PREMIUM smart assistant!
+    Handle voice messages - PREMIUM smart assistant with transcription and AI response!
     """
     if not update.message or not update.message.voice:
         return
@@ -1888,23 +1908,53 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     name = get_user_display_name(update)
     
-    # PREMIUM: Show processing with loading
-    loading = await update.message.reply_text("🎙 *Listening...*")
-    await update.message.chat.send_action(ChatAction.RECORD_VOICE)
+    # Show processing with loading
+    loading = await update.message.reply_text("Listening...")
+    await update.message.chat.send_action(ChatAction.TYPING)
     
     # Download voice
     voice = update.message.voice
     voice_file = await voice.get_file()
     voice_bytes = await voice_file.download_as_bytearray()
     
-    # Analyze emotions
-    emotions = None
-    if emotion_engine.is_configured:
-        emotions = await emotion_engine.analyze_voice_emotion(bytes(voice_bytes))
+    # Transcribe voice using Groq Whisper
+    await loading.edit_text("Transcribing...")
+    transcribed_text = await transcribe_voice(bytes(voice_bytes))
     
-    # Update loading
-    await loading.edit_text("🧠 *Understanding...*")
+    if not transcribed_text:
+        await loading.edit_text("Sorry, I couldn't understand that audio. Please try again.")
+        return
+    
+    # Show transcription
+    await loading.edit_text(f"You said: {transcribed_text[:100]}...")
     await asyncio.sleep(0.5)
+    
+    # Generate AI response to the transcribed text
+    await loading.edit_text("Thinking...")
+    await update.message.chat.send_action(ChatAction.TYPING)
+    
+    # Get conversation history
+    history = await db.get_conversation_history(user_id, limit=10)
+    await db.add_conversation(user_id, "user", transcribed_text)
+    
+    # Check for active personality
+    personality = await db.get_active_personality(user_id)
+    system_prompt = personality.get('system_prompt', WAYA_SYSTEM_PROMPT) if personality else WAYA_SYSTEM_PROMPT
+    
+    # Generate AI response
+    response_text = await generate_response(
+        user_message=transcribed_text,
+        conversation_history=history,
+        system_prompt=system_prompt,
+        user_name=name
+    )
+    
+    await db.add_conversation(user_id, "assistant", response_text)
+    await db.increment_stat(user_id, "total_ai_requests")
+    await db.add_xp(user_id, 5)
+    
+    # Clean response for Telegram
+    clean_response = clean_markdown_for_telegram(response_text)
     
     # Get voice preference
     voice_name = "Rachel"
@@ -1920,42 +1970,22 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 voice_name = pref.get('voice_name', 'Rachel')
                 voice_style = pref.get('voice_style', 'default')
     
-    # Smart response based on what user might want
-    await loading.edit_text("✨ *Generating reply...*")
+    # Delete loading message
+    await loading.delete()
     
-    # Generate smart response
-    response_text = f"Hey {name}! Heard you loud and clear 🔊\n\nWhat would you like me to help with?"
+    # Send text response first
+    await safe_reply_text(update.message, clean_response, parse_mode=ParseMode.MARKDOWN)
     
-    # Send voice reply
-    await update.message.chat.send_action(ChatAction.RECORD_VOICE)
-    
+    # Try to send voice reply if ElevenLabs is configured
     if voice_engine.is_configured:
-        audio_bytes = await voice_engine.text_to_speech(response_text, voice=voice_name, style=voice_style)
+        await update.message.chat.send_action(ChatAction.RECORD_VOICE)
+        audio_bytes = await voice_engine.text_to_speech(response_text[:2000], voice=voice_name, style=voice_style)
         
         if audio_bytes:
-            keyboard = [
-                [InlineKeyboardButton("📝 Write Note", callback_data="quick_note"),
-                 InlineKeyboardButton("⏰ Reminder", callback_data="quick_reminder")],
-                [InlineKeyboardButton("🤖 Build Bot", callback_data="build_bot")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await loading.delete()
             await update.message.reply_voice(
                 io.BytesIO(audio_bytes), 
-                caption=f"🎙 Hey {name}!"
+                caption="Voice reply"
             )
-            await update.message.reply_text(
-                f"🎙 *Got your voice!*\n\n"
-                f"I can:\n"
-                f"• Set reminders & notes\n"
-                f"• Build custom bots\n"
-                f"• Answer questions\n\n"
-                f"||Tap a button or just talk!||",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=reply_markup
-            )
-            return
     
     
 

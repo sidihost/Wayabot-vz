@@ -1,0 +1,27 @@
+# Waya Bot Dependencies
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Telegram Bot
+python-telegram-bot>=21.0
+
+# AI - Groq
+groq>=0.4.0
+
+# Database
+asyncpg>=0.29.0
+
+# Configuration
+pydantic-settings>=2.1.0
+
+# HTTP Client
+httpx>=0.26.0
+
+# Optional: Voice AI (ElevenLabs)
+# elevenlabs>=1.0.0
+
+# Optional: Scheduling
+apscheduler>=3.10.0
