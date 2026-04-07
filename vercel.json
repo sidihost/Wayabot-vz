@@ -2,7 +2,7 @@
   "experimentalServices": {
     "backend": {
       "entrypoint": "backend/main.py",
-      "routePrefix": "/"
+      "routePrefix": "/backend"
     }
   }
 }

@@ -9,15 +9,24 @@ from typing import Optional, Dict, Any, List
 from groq import AsyncGroq
 from datetime import datetime
 
-# 🏆 BEST Groq Models
-BEST_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # FASTEST & SMARTEST
-REASONING_MODEL = "deepseek-ai/DeepSeek-R1"
+# Best Groq Models for maximum intelligence
+BEST_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # Fastest and smartest
+REASONING_MODEL = "deepseek-ai/DeepSeek-R1"  # For complex reasoning tasks
+CREATIVE_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"  # For creative tasks
 
-# 🎙 Whisper - FASTEST transcription
+# Whisper - fastest transcription
 WHISPER_MODEL = "whisper-large-v3-turbo"
 
-# 🤖 COMPOUND - Agentic AI with TOOLS!
-COMPOUND_MODEL = "compound-beta"  # Web search + code execution!
+# COMPOUND - Agentic AI with tools
+COMPOUND_MODEL = "compound-beta"  # Web search + code execution
+
+# Bot Builder Intelligence Levels
+INTELLIGENCE_LEVELS = {
+    "basic": {"model": BEST_MODEL, "max_tokens": 1024, "temperature": 0.5},
+    "standard": {"model": BEST_MODEL, "max_tokens": 2048, "temperature": 0.7},
+    "advanced": {"model": REASONING_MODEL, "max_tokens": 4096, "temperature": 0.6},
+    "creative": {"model": CREATIVE_MODEL, "max_tokens": 4096, "temperature": 0.85},
+}
 
 
 async def compound_response(user_message: str, conversation_history: list = None) -> str:
@@ -331,70 +340,386 @@ Be warm, helpful, and attentive. Adapt your tone based on what they need."""
         return f"I'm here for you. {str(e)}"
 
 
-async def generate_bot_suggestion(user_request: str) -> Dict[str, Any]:
-    """Generate COMPLETE bot with code - fully autonomous AI builder."""
+async def generate_bot_suggestion(user_request: str, intelligence_level: str = "advanced") -> Dict[str, Any]:
+    """
+    Generate a highly intelligent, fully-featured Telegram bot.
+    This is the core AI bot builder that creates complete, production-ready bots.
+    """
     client = get_groq_client()
     
-    # This is the key - AI writes actual code, not just config!
-    prompt = f"""You're an expert Telegram bot developer. Create a COMPLETE working bot based on user request.
+    # Use appropriate model based on intelligence level
+    config = INTELLIGENCE_LEVELS.get(intelligence_level, INTELLIGENCE_LEVELS["advanced"])
+    
+    # Advanced multi-step prompt for maximum intelligence
+    analysis_prompt = f"""Analyze this bot request and extract key requirements:
+    
+Request: {user_request}
 
-User Request: {user_request}
+Identify:
+1. Primary purpose/function
+2. Target audience
+3. Key features needed
+4. Personality traits
+5. Any specific integrations or capabilities mentioned
 
-Create a full bot configuration. Respond with JSON:
+Respond with a brief analysis."""
+
+    # First, analyze the request
+    try:
+        analysis = await client.chat.completions.create(
+            model=BEST_MODEL,
+            messages=[
+                {"role": "system", "content": "You are an expert bot requirements analyst. Be concise and insightful."},
+                {"role": "user", "content": analysis_prompt}
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
+        analysis_result = analysis.choices[0].message.content
+    except:
+        analysis_result = user_request
+
+    # Now generate the complete bot with enhanced intelligence
+    generation_prompt = f"""You are the world's best Telegram bot architect and AI engineer. Create an EXCEPTIONAL, highly intelligent bot.
+
+ORIGINAL REQUEST: {user_request}
+
+ANALYSIS: {analysis_result}
+
+Design a complete, production-ready bot. The bot should be:
+- Highly intelligent with context awareness
+- Natural and conversational
+- Capable of handling complex queries
+- Proactive in offering help
+
+Generate a comprehensive bot configuration as JSON:
 {{
-    "bot_name": "ShortNameForBot",
-    "bot_description": "What this bot does (2 sentences max)",
-    "bot_type": "general", 
-    "system_prompt": "You are [bot name]. [description]. Be helpful, concise, and [personality traits].",
-    "greeting_message": "Hey! I'm [name]. [what I do]. How can I help you?",
-    "features": ["feature 1", "feature 2", "feature 3"],
-    "commands": [
-        {{"command": "/help", "description": "Get help"}},
-        {{"command": "/example", "description": "Example action"}}
+    "bot_name": "UniqueCreativeName",
+    "bot_description": "Compelling 2-sentence description of capabilities",
+    "bot_type": "specific_type",
+    "category": "category_name",
+    "intelligence_level": "advanced",
+    
+    "personality": {{
+        "traits": ["trait1", "trait2", "trait3"],
+        "tone": "professional/friendly/casual/witty",
+        "communication_style": "concise/detailed/adaptive",
+        "emoji_usage": "minimal/moderate/expressive"
+    }},
+    
+    "system_prompt": "Comprehensive system prompt that defines the bot's identity, capabilities, personality, and behavior guidelines. Be specific and detailed. Include context awareness instructions.",
+    
+    "greeting_message": "Engaging welcome message that introduces the bot and its capabilities",
+    
+    "features": [
+        {{
+            "name": "Feature Name",
+            "description": "What it does",
+            "trigger": "How to activate it",
+            "ai_powered": true
+        }}
     ],
-    "code_example": "Optional: if there's a specific function needed, show brief Python code here",
+    
+    "commands": [
+        {{
+            "command": "/commandname",
+            "description": "Clear description",
+            "parameters": "optional parameters",
+            "example": "/commandname example usage"
+        }}
+    ],
+    
+    "conversation_flows": [
+        {{
+            "trigger": "user intent or keyword",
+            "response_type": "text/media/interactive",
+            "ai_generated": true,
+            "follow_up": "optional follow-up prompt"
+        }}
+    ],
+    
+    "knowledge_areas": ["area1", "area2", "area3"],
+    
     "response_templates": {{
-        "greeting": "Hey! I'm [name]. [what I do]. How can I help?",
-        "help": "Available commands: /help, /example",
-        "fallback": "I didn't get that. Try /help for options."
+        "greeting": "Welcome message",
+        "help": "Help message with available commands",
+        "fallback": "Intelligent fallback that offers alternatives",
+        "error": "Friendly error message",
+        "success": "Confirmation message template"
+    }},
+    
+    "ai_capabilities": {{
+        "context_memory": true,
+        "learning_enabled": false,
+        "emotion_aware": true,
+        "multilingual": false,
+        "voice_enabled": false,
+        "image_analysis": false
+    }},
+    
+    "settings": {{
+        "response_delay_ms": 0,
+        "typing_simulation": true,
+        "max_response_length": 2000,
+        "rate_limit_per_minute": 30
     }}
 }}
 
-IMPORTANT:
-- Keep it SIMPLE - not too many features
-- Make it 3 features max
-- system_prompt should be natural and conversational
-- greeting should be short and friendly
+IMPORTANT GUIDELINES:
+- Make the system_prompt DETAILED and SPECIFIC - this is the brain of the bot
+- Include at least 3-5 meaningful features
+- Commands should be intuitive and memorable
+- Conversation flows should handle common user intents
+- The bot should feel intelligent and capable
+- Include error handling and edge cases in response templates
 
-Respond ONLY with valid JSON."""
+Respond ONLY with valid, complete JSON."""
 
     try:
         response = await client.chat.completions.create(
-            model=BEST_MODEL,
+            model=config["model"],
             messages=[
-                {"role": "system", "content": "You are an expert Telegram bot developer. Create simple, working bots. Be concise."},
+                {
+                    "role": "system", 
+                    "content": """You are the world's most advanced AI bot architect. You create Telegram bots that are:
+- Exceptionally intelligent and context-aware
+- Natural in conversation
+- Feature-rich but user-friendly
+- Production-ready with proper error handling
+
+Your bots are known for being the best in class - intelligent, helpful, and delightful to use.
+Always respond with valid, complete JSON only."""
+                },
+                {"role": "user", "content": generation_prompt}
+            ],
+            temperature=config["temperature"],
+            max_tokens=config["max_tokens"]
+        )
+        
+        result = response.choices[0].message.content
+        
+        # Parse the JSON response
+        try:
+            bot_config = json.loads(result)
+        except json.JSONDecodeError:
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', result)
+            if json_match:
+                bot_config = json.loads(json_match.group())
+            else:
+                return {"error": "Could not parse bot configuration", "raw": result}
+        
+        # Enrich the configuration with metadata
+        bot_config['user_original_request'] = user_request
+        bot_config['created_with_intelligence'] = intelligence_level
+        bot_config['ai_analysis'] = analysis_result
+        
+        # Validate and ensure required fields
+        required_fields = ['bot_name', 'system_prompt', 'greeting_message']
+        for field in required_fields:
+            if field not in bot_config:
+                bot_config[field] = _generate_default_field(field, user_request)
+        
+        return bot_config
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _generate_default_field(field: str, request: str) -> str:
+    """Generate default values for missing fields."""
+    defaults = {
+        'bot_name': 'SmartBot',
+        'system_prompt': f'You are a helpful assistant created for: {request}. Be friendly, concise, and helpful.',
+        'greeting_message': 'Hello! I am here to help you. How can I assist you today?'
+    }
+    return defaults.get(field, '')
+
+
+async def generate_advanced_bot(
+    user_request: str,
+    bot_type: str = None,
+    features: List[str] = None,
+    personality: Dict[str, Any] = None,
+    knowledge_base: List[str] = None
+) -> Dict[str, Any]:
+    """
+    Generate a highly customized, intelligent bot with specific requirements.
+    This is for power users who want fine-grained control.
+    """
+    client = get_groq_client()
+    
+    customization = {
+        "requested_type": bot_type,
+        "requested_features": features or [],
+        "personality_config": personality or {},
+        "knowledge_areas": knowledge_base or []
+    }
+    
+    prompt = f"""Create a specialized, highly intelligent Telegram bot with these specific requirements:
+
+CORE REQUEST: {user_request}
+
+CUSTOMIZATION:
+- Bot Type: {bot_type or 'auto-detect based on request'}
+- Requested Features: {json.dumps(features or ['auto-generate based on request'])}
+- Personality: {json.dumps(personality or {'auto': True})}
+- Knowledge Base: {json.dumps(knowledge_base or ['general'])}
+
+Design the most intelligent, capable bot possible that meets these requirements.
+The bot should demonstrate:
+1. Deep understanding of context
+2. Proactive helpful behavior
+3. Natural conversation flow
+4. Expert-level knowledge in its domain
+5. Graceful error handling
+
+Generate comprehensive JSON configuration with all required fields."""
+
+    try:
+        response = await client.chat.completions.create(
+            model=REASONING_MODEL,  # Use reasoning model for complex customization
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an elite AI bot architect specializing in creating highly customized, intelligent bots. Generate complete, production-ready configurations."
+                },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
-            max_tokens=1500
+            temperature=0.6,
+            max_tokens=4096
         )
         
         result = response.choices[0].message.content
         try:
             config = json.loads(result)
-            # Add the original request for reference
-            config['user_original_request'] = user_request
+            config['customization_applied'] = customization
             return config
         except json.JSONDecodeError:
             import re
             json_match = re.search(r'\{[\s\S]*\}', result)
             if json_match:
                 config = json.loads(json_match.group())
-                config['user_original_request'] = user_request
+                config['customization_applied'] = customization
                 return config
-            return {"error": "Could not create bot", "raw": result}
+            return {"error": "Could not create customized bot"}
     except Exception as e:
         return {"error": str(e)}
+
+
+async def enhance_bot_intelligence(existing_bot: Dict[str, Any], enhancement_request: str) -> Dict[str, Any]:
+    """
+    Enhance an existing bot's intelligence and capabilities.
+    """
+    client = get_groq_client()
+    
+    prompt = f"""You have an existing bot configuration. Enhance it based on the user's request.
+
+EXISTING BOT:
+{json.dumps(existing_bot, indent=2)}
+
+ENHANCEMENT REQUEST: {enhancement_request}
+
+Improve the bot by:
+1. Enhancing the system prompt for better intelligence
+2. Adding relevant new features
+3. Improving conversation flows
+4. Making responses more natural and helpful
+
+Return the COMPLETE enhanced bot configuration as JSON.
+Preserve all existing good features while adding improvements."""
+
+    try:
+        response = await client.chat.completions.create(
+            model=BEST_MODEL,
+            messages=[
+                {"role": "system", "content": "You are a bot enhancement specialist. Improve bots while preserving their core identity."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=3000
+        )
+        
+        result = response.choices[0].message.content
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', result)
+            if json_match:
+                return json.loads(json_match.group())
+            return existing_bot  # Return original if enhancement fails
+    except Exception as e:
+        return {"error": str(e), "original": existing_bot}
+
+
+async def generate_bot_from_template(template_name: str, customizations: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Generate a bot based on a predefined template with optional customizations.
+    """
+    templates = {
+        "customer_support": {
+            "base_type": "customer_support",
+            "features": ["ticket_creation", "faq_answers", "escalation", "satisfaction_survey"],
+            "personality": {"tone": "professional", "empathy": "high"}
+        },
+        "personal_assistant": {
+            "base_type": "personal_assistant",
+            "features": ["reminders", "notes", "tasks", "calendar", "smart_suggestions"],
+            "personality": {"tone": "friendly", "proactive": True}
+        },
+        "quiz_master": {
+            "base_type": "quiz_master",
+            "features": ["quiz_generation", "scoring", "leaderboards", "explanations"],
+            "personality": {"tone": "enthusiastic", "educational": True}
+        },
+        "code_assistant": {
+            "base_type": "code_helper",
+            "features": ["code_review", "debugging", "explanations", "best_practices"],
+            "personality": {"tone": "technical", "detailed": True}
+        },
+        "language_tutor": {
+            "base_type": "language_tutor",
+            "features": ["vocabulary", "grammar", "conversation_practice", "pronunciation"],
+            "personality": {"tone": "encouraging", "patient": True}
+        },
+        "content_creator": {
+            "base_type": "creative_writer",
+            "features": ["brainstorming", "writing", "editing", "style_matching"],
+            "personality": {"tone": "creative", "adaptive": True}
+        },
+        "research_assistant": {
+            "base_type": "general",
+            "features": ["web_search", "summarization", "fact_checking", "citations"],
+            "personality": {"tone": "academic", "thorough": True}
+        },
+        "fitness_coach": {
+            "base_type": "health_coach",
+            "features": ["workout_plans", "nutrition", "progress_tracking", "motivation"],
+            "personality": {"tone": "motivating", "supportive": True}
+        }
+    }
+    
+    if template_name not in templates:
+        return {"error": f"Template '{template_name}' not found. Available: {list(templates.keys())}"}
+    
+    template = templates[template_name]
+    
+    # Merge customizations
+    if customizations:
+        if 'features' in customizations:
+            template['features'] = list(set(template['features'] + customizations['features']))
+        if 'personality' in customizations:
+            template['personality'].update(customizations['personality'])
+    
+    # Generate the full bot based on template
+    request = f"Create a {template_name.replace('_', ' ')} bot with features: {', '.join(template['features'])}"
+    return await generate_advanced_bot(
+        user_request=request,
+        bot_type=template['base_type'],
+        features=template['features'],
+        personality=template['personality']
+    )
 
 
 async def analyze_message_intent(message: str) -> Dict[str, Any]:
