@@ -349,31 +349,35 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     if is_new:
         welcome_message = f"""
-🎉 *Welcome to Waya, {name}!*
+*Welcome to Waya, {name}!*
 
-I'm your intelligent bot builder and AI assistant, powered by cutting-edge AI to help you with anything!
+I'm your powerful bot builder and AI assistant!
 
-*🚀 Quick Start:*
+*Quick Start:*
 
-📝 *Productivity*
-• `/remind Call mom in 2 hours` - Set reminders
-• `/note Meeting ideas` - Take quick notes
-• `/task Buy groceries` - Track tasks
+*Bot Building*
+- `/build` - Create AI bots with natural language
+- `/templates` - 20+ pre-built templates
+- `/mybots` - Manage your creations
 
-🤖 *Bot Building*
-• `/build` - Create your own custom bot
-• `/templates` - Browse 12+ bot templates
-• `/mybots` - Manage your bots
+*Business & Channels*
+- Business bots for Telegram Business
+- Channel bots for content scheduling
+- Polls & quizzes for engagement
 
-🧠 *AI Features*
-• Just chat with me naturally!
-• `/translate Spanish Hello world`
-• `/summarize [paste text]`
-• `/quiz Science` - Take a quiz
+*Productivity*
+- `/remind` - Smart reminders
+- `/note` - Quick notes
+- `/task` - Task tracking
 
-📊 *Progress*
-• `/profile` - Your stats & achievements
-• `/leaderboard` - Top users
+*AI Features*
+- Chat naturally with me
+- `/translate` - Any language
+- `/quiz` - Test your knowledge
+
+*Progress*
+- `/profile` - Your stats
+- `/leaderboard` - Top users
 
 *Type /help for all commands!*
 
@@ -437,13 +441,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 `/done <id>` - Complete task
 `/deltask <id>` - Delete task
 
-*🤖 Bot Building:*
-`/build` - Start building a bot
-`/templates` - Browse templates
-`/mybots` - Your custom bots
+*Bot Building:*
+`/build` - Create AI bots with natural language
+`/templates` - Browse 20+ templates
+`/mybots` - Manage your bots
 `/usebot <id>` - Activate a bot
 
-*🧠 AI Features:*
+*Business & Channels:*
+Use the `/build` menu to access:
+- Business bots for Telegram Business
+- Channel bots for scheduling
+- Polls & quizzes for engagement
+
+*AI Features:*
 `/chat` - Start AI chat mode
 `/clear` - Clear chat history
 `/translate <lang> <text>` - Translate
@@ -1466,6 +1476,58 @@ async def quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 
+async def poll_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /poll command - create quick polls."""
+    await ensure_user(update)
+    await track_command(update.effective_user.id, "poll")
+    user_id = update.effective_user.id
+    
+    # Check if args provided
+    if context.args:
+        # Parse inline poll: /poll Question? | Option1 | Option2 | ...
+        full_text = " ".join(context.args)
+        if "|" in full_text:
+            parts = [p.strip() for p in full_text.split("|")]
+            if len(parts) >= 3:
+                question = parts[0]
+                options = parts[1:]
+                
+                if len(options) > 10:
+                    options = options[:10]
+                
+                try:
+                    await update.message.reply_poll(
+                        question=question,
+                        options=options,
+                        is_anonymous=True
+                    )
+                    await db.add_xp(user_id, 10)
+                    await db.increment_stat(user_id, "total_polls_created")
+                    return
+                except Exception as e:
+                    await update.message.reply_text(f"Error creating poll: {str(e)}")
+                    return
+    
+    # Show poll builder menu
+    keyboard = [
+        [InlineKeyboardButton("Regular Poll", callback_data="bb_poll_regular")],
+        [InlineKeyboardButton("Quiz", callback_data="bb_poll_quiz")],
+        [InlineKeyboardButton("Multi-Answer", callback_data="bb_poll_multi")],
+        [InlineKeyboardButton("Scheduled Poll", callback_data="bb_poll_scheduled")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "*Create a Poll*\n\n"
+        "Choose a poll type or create one inline:\n\n"
+        "`/poll Question? | Option 1 | Option 2 | Option 3`\n\n"
+        "Example:\n"
+        "`/poll Lunch? | Pizza | Sushi | Tacos`",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=reply_markup
+    )
+
+
 # =====================================================
 # PERSONALITY COMMANDS
 # =====================================================
@@ -1552,52 +1614,6 @@ async def set_personality_command(update: Update, context: ContextTypes.DEFAULT_
 # =====================================================
 # POLL COMMANDS
 # =====================================================
-
-async def poll_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the /poll command."""
-    await ensure_user(update)
-    await track_command(update.effective_user.id, "poll")
-    
-    if not context.args:
-        await update.message.reply_text(
-            "📊 *Create a Poll*\n\n"
-            "Usage: `/poll <question> | <option1> | <option2> ...`\n\n"
-            "Example:\n"
-            "`/poll What's your favorite color? | Red | Blue | Green | Yellow`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-    
-    text = " ".join(context.args)
-    parts = [p.strip() for p in text.split("|")]
-    
-    if len(parts) < 3:
-        await update.message.reply_text(
-            "❌ Need at least 2 options.\n\n"
-            "Format: `/poll Question | Option1 | Option2`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-    
-    question = parts[0]
-    options = parts[1:][:10]  # Max 10 options
-    
-    # Create poll record
-    poll_id = await db.create_poll(
-        user_id=update.effective_user.id,
-        question=question,
-        options=options
-    )
-    
-    # Send Telegram poll
-    poll_message = await update.message.reply_poll(
-        question=question,
-        options=options,
-        is_anonymous=True
-    )
-    
-    await update.message.reply_text(f"✅ Poll created! ID: {poll_id}")
-
 
 async def poll_results_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /pollresults command."""
@@ -1940,6 +1956,412 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=reply_markup
             )
+        return
+    
+    # ==========================================================================
+    # POLL CREATION HANDLERS
+    # ==========================================================================
+    
+    elif state == "bb_creating_poll":
+        poll_type = state_data.get('poll_type', 'regular')
+        parts = [p.strip() for p in message_text.split('|')]
+        
+        if len(parts) < 3:
+            await update.message.reply_text(
+                "Please provide a question and at least 2 options.\n"
+                "Format: `Question | Option 1 | Option 2 | ...`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        question = parts[0]
+        options = []
+        correct_option = 0
+        explanation = None
+        close_period = None
+        
+        for i, part in enumerate(parts[1:]):
+            if part.startswith('correct='):
+                try:
+                    correct_option = int(part.replace('correct=', '')) - 1
+                except:
+                    pass
+            elif part.startswith('explanation='):
+                explanation = part.replace('explanation=', '')
+            elif part.startswith('schedule='):
+                schedule_str = part.replace('schedule=', '')
+                # Parse schedule time (simplified)
+                if 'm' in schedule_str:
+                    minutes = int(schedule_str.replace('m', ''))
+                    close_period = minutes * 60
+                elif 'h' in schedule_str:
+                    hours = int(schedule_str.replace('h', ''))
+                    close_period = hours * 3600
+            else:
+                options.append(part)
+        
+        if len(options) < 2:
+            await update.message.reply_text("Please provide at least 2 options.")
+            return
+        
+        if len(options) > 10:
+            options = options[:10]  # Telegram limit
+        
+        await db.clear_session_state(user_id)
+        
+        try:
+            if poll_type == 'quiz':
+                await update.message.reply_poll(
+                    question=question,
+                    options=options,
+                    type='quiz',
+                    correct_option_id=correct_option,
+                    explanation=explanation,
+                    is_anonymous=True
+                )
+            elif poll_type == 'multi':
+                await update.message.reply_poll(
+                    question=question,
+                    options=options,
+                    allows_multiple_answers=True,
+                    is_anonymous=True
+                )
+            else:
+                await update.message.reply_poll(
+                    question=question,
+                    options=options,
+                    is_anonymous=True,
+                    open_period=close_period
+                )
+            
+            await db.add_xp(user_id, 10)
+            await update.message.reply_text("Poll created successfully!")
+        except Exception as e:
+            await update.message.reply_text(f"Error creating poll: {str(e)}")
+        return
+    
+    elif state == "bb_adding_bot_poll":
+        bot_id = state_data.get('bot_id')
+        parts = [p.strip() for p in message_text.split('|')]
+        
+        if len(parts) < 4:
+            await update.message.reply_text(
+                "Please provide: `command | question | option1 | option2 | ...`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        command = parts[0].replace('/', '').strip()
+        question = parts[1]
+        options = parts[2:]
+        
+        poll_config = await bot_builder.create_poll_for_bot(
+            bot_id=bot_id,
+            user_id=user_id,
+            question=question,
+            options=options
+        )
+        
+        # Add command to bot
+        async with db.get_connection() as conn:
+            bot = await conn.fetchrow("SELECT commands FROM custom_bots WHERE id = $1", bot_id)
+            if bot:
+                commands = json.loads(bot['commands'] or '[]')
+                commands.append({
+                    "command": command,
+                    "description": f"Send poll: {question[:30]}...",
+                    "action": "send_poll",
+                    "poll_id": poll_config['id']
+                })
+                await conn.execute(
+                    "UPDATE custom_bots SET commands = $1 WHERE id = $2",
+                    json.dumps(commands), bot_id
+                )
+        
+        await db.clear_session_state(user_id)
+        
+        keyboard = [[InlineKeyboardButton("Back to Bot", callback_data=f"bb_edit_{bot_id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"Poll added to bot!\n\n"
+            f"*Command:* /{command}\n"
+            f"*Question:* {question}",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+        return
+    
+    # ==========================================================================
+    # BUSINESS BOT HANDLERS
+    # ==========================================================================
+    
+    elif state == "bb_business_name":
+        business_name = message_text.strip()
+        
+        # Create business bot
+        result = await bot_builder.create_bot_with_ai(
+            update, context,
+            f"A professional business bot for {business_name}. Should handle customer inquiries, provide business hours, collect leads, and send away messages."
+        )
+        
+        if "error" in result:
+            await update.message.reply_text(f"Error: {result['error']}")
+            await db.clear_session_state(user_id)
+            return
+        
+        bot_id = result['bot_id']
+        
+        # Configure as business bot
+        await bot_builder.create_business_bot_config(
+            bot_id=bot_id,
+            user_id=user_id,
+            business_name=business_name
+        )
+        
+        await db.clear_session_state(user_id)
+        
+        keyboard = [
+            [InlineKeyboardButton("Set Hours", callback_data="bb_biz_hours")],
+            [InlineKeyboardButton("Away Message", callback_data="bb_biz_away")],
+            [InlineKeyboardButton("Quick Replies", callback_data="bb_biz_quick")],
+            [InlineKeyboardButton("View Bot", callback_data=f"bb_edit_{bot_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"*Business Bot Created!*\n\n"
+            f"*{business_name}* is ready to serve customers.\n\n"
+            f"Now let's configure it:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+        return
+    
+    elif state == "bb_setting_hours":
+        bot_id = state_data.get('bot_id')
+        
+        # Parse working hours (simplified)
+        hours_text = message_text.strip()
+        
+        async with db.get_connection() as conn:
+            bot = await conn.fetchrow("SELECT business_config FROM custom_bots WHERE id = $1", bot_id)
+            config = json.loads(bot['business_config'] or '{}') if bot else {}
+            config['working_hours_text'] = hours_text
+            await conn.execute(
+                "UPDATE custom_bots SET business_config = $1 WHERE id = $2",
+                json.dumps(config), bot_id
+            )
+        
+        await db.clear_session_state(user_id)
+        
+        await update.message.reply_text(
+            f"Working hours saved!\n\n{hours_text}",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="bb_business")]])
+        )
+        return
+    
+    elif state == "bb_setting_away":
+        bot_id = state_data.get('bot_id')
+        away_message = message_text.strip()
+        
+        async with db.get_connection() as conn:
+            bot = await conn.fetchrow("SELECT business_config FROM custom_bots WHERE id = $1", bot_id)
+            config = json.loads(bot['business_config'] or '{}') if bot else {}
+            config['away_message'] = away_message
+            await conn.execute(
+                "UPDATE custom_bots SET business_config = $1 WHERE id = $2",
+                json.dumps(config), bot_id
+            )
+        
+        await db.clear_session_state(user_id)
+        
+        await update.message.reply_text(
+            f"Away message saved!\n\n\"{away_message}\"",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="bb_business")]])
+        )
+        return
+    
+    elif state == "bb_adding_quick_reply":
+        bot_id = state_data.get('bot_id')
+        parts = message_text.split('|')
+        
+        if len(parts) < 2:
+            await update.message.reply_text("Format: `keyword | response`", parse_mode=ParseMode.MARKDOWN)
+            return
+        
+        keyword = parts[0].strip().lower()
+        response = parts[1].strip()
+        
+        async with db.get_connection() as conn:
+            bot = await conn.fetchrow("SELECT business_config FROM custom_bots WHERE id = $1", bot_id)
+            config = json.loads(bot['business_config'] or '{}') if bot else {}
+            quick_replies = config.get('quick_replies', [])
+            quick_replies.append({"trigger": keyword, "response": response})
+            config['quick_replies'] = quick_replies
+            await conn.execute(
+                "UPDATE custom_bots SET business_config = $1 WHERE id = $2",
+                json.dumps(config), bot_id
+            )
+        
+        await db.clear_session_state(user_id)
+        
+        keyboard = [
+            [InlineKeyboardButton("Add Another", callback_data="bb_biz_quick")],
+            [InlineKeyboardButton("Done", callback_data="bb_business")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"Quick reply added!\n\n"
+            f"*Keyword:* {keyword}\n"
+            f"*Response:* {response}",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+        return
+    
+    # ==========================================================================
+    # CHANNEL BOT HANDLERS
+    # ==========================================================================
+    
+    elif state == "bb_channel_desc":
+        channel_desc = message_text.strip()
+        
+        # Create channel bot
+        result = await bot_builder.create_bot_with_ai(
+            update, context,
+            f"A channel management bot for: {channel_desc}. Should help with scheduled posts, announcements, polls, and content formatting."
+        )
+        
+        if "error" in result:
+            await update.message.reply_text(f"Error: {result['error']}")
+            await db.clear_session_state(user_id)
+            return
+        
+        bot_id = result['bot_id']
+        
+        # Configure as channel bot
+        await bot_builder.create_channel_bot_config(
+            bot_id=bot_id,
+            user_id=user_id
+        )
+        
+        await db.clear_session_state(user_id)
+        
+        keyboard = [
+            [InlineKeyboardButton("Schedule Post", callback_data="bb_ch_schedule")],
+            [InlineKeyboardButton("Create Poll", callback_data="bb_ch_polls")],
+            [InlineKeyboardButton("View Bot", callback_data=f"bb_edit_{bot_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"*Channel Bot Created!*\n\n"
+            f"Your bot is ready to manage your channel.\n\n"
+            f"*Next steps:*\n"
+            f"1. Add this bot as admin to your channel\n"
+            f"2. Use the buttons below to get started",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+        return
+    
+    elif state == "bb_scheduling_post":
+        bot_id = state_data.get('bot_id')
+        
+        # Parse the post content and schedule
+        if '---' in message_text:
+            content, settings = message_text.split('---', 1)
+        else:
+            content = message_text
+            settings = ""
+        
+        content = content.strip()
+        
+        # Parse settings
+        schedule_time = None
+        pin = False
+        buttons = []
+        
+        for line in settings.strip().split('\n'):
+            line = line.strip().lower()
+            if line.startswith('schedule:'):
+                schedule_time = line.replace('schedule:', '').strip()
+            elif line.startswith('pin:'):
+                pin = 'true' in line
+            elif line.startswith('buttons:'):
+                btn_str = line.replace('buttons:', '').strip()
+                # Parse buttons (simplified)
+                for btn in btn_str.split(','):
+                    if '|' in btn:
+                        label, url = btn.split('|', 1)
+                        buttons.append({"text": label.strip(), "url": url.strip()})
+        
+        # For now, just preview the scheduled post
+        await db.clear_session_state(user_id)
+        
+        preview = f"*Scheduled Post Preview:*\n\n{content}\n\n"
+        if schedule_time:
+            preview += f"*Schedule:* {schedule_time}\n"
+        if pin:
+            preview += "*Will be pinned*\n"
+        if buttons:
+            preview += f"*Buttons:* {len(buttons)} attached\n"
+        
+        keyboard = [
+            [InlineKeyboardButton("Confirm & Schedule", callback_data=f"bb_confirm_post_{bot_id}")],
+            [InlineKeyboardButton("Edit", callback_data="bb_ch_schedule")],
+            [InlineKeyboardButton("Cancel", callback_data="bb_channel")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            preview,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+        return
+    
+    elif state == "bb_channel_poll":
+        parts = [p.strip() for p in message_text.split('|')]
+        
+        if len(parts) < 3:
+            await update.message.reply_text("Please provide question and at least 2 options.")
+            return
+        
+        question = parts[0]
+        options = []
+        anonymous = True
+        close_time = None
+        
+        for part in parts[1:]:
+            if part.startswith('anonymous='):
+                anonymous = part.replace('anonymous=', '').lower() == 'true'
+            elif part.startswith('close='):
+                close_str = part.replace('close=', '')
+                if 'h' in close_str:
+                    close_time = int(close_str.replace('h', '')) * 3600
+                elif 'd' in close_str:
+                    close_time = int(close_str.replace('d', '')) * 86400
+            else:
+                options.append(part)
+        
+        await db.clear_session_state(user_id)
+        
+        try:
+            await update.message.reply_poll(
+                question=question,
+                options=options[:10],
+                is_anonymous=anonymous,
+                open_period=close_time
+            )
+            await update.message.reply_text(
+                "Poll created! Forward it to your channel.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="bb_channel")]])
+            )
+        except Exception as e:
+            await update.message.reply_text(f"Error: {str(e)}")
         return
     
     # Handle personality creation flow
@@ -2794,9 +3216,227 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             reply_markup=reply_markup
         )
     
+    # ==========================================================================
+    # BOT BUILDER - POLLS & QUIZZES
+    # ==========================================================================
+    
+    elif data == "bb_polls":
+        await bot_builder.show_poll_creator(update, context)
+    
+    elif data == "bb_poll_regular":
+        await db.update_session_state(user_id, "bb_creating_poll", {"poll_type": "regular"})
+        await query.message.edit_text(
+            "*Create Regular Poll*\n\n"
+            "Send your poll in this format:\n\n"
+            "`Question | Option 1 | Option 2 | Option 3`\n\n"
+            "Example:\n"
+            "`What's your favorite color? | Red | Blue | Green | Yellow`\n\n"
+            "You can add up to 10 options.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "bb_poll_quiz":
+        await db.update_session_state(user_id, "bb_creating_poll", {"poll_type": "quiz"})
+        await query.message.edit_text(
+            "*Create Quiz*\n\n"
+            "Send your quiz in this format:\n\n"
+            "`Question | Option 1 | Option 2 | ... | correct=N | explanation=Your explanation`\n\n"
+            "Example:\n"
+            "`What is 2+2? | 3 | 4 | 5 | 22 | correct=2 | explanation=Basic math!`\n\n"
+            "_Note: Options are numbered starting from 1_",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "bb_poll_multi":
+        await db.update_session_state(user_id, "bb_creating_poll", {"poll_type": "multi"})
+        await query.message.edit_text(
+            "*Create Multi-Answer Poll*\n\n"
+            "Send your poll (users can select multiple options):\n\n"
+            "`Question | Option 1 | Option 2 | Option 3`\n\n"
+            "Example:\n"
+            "`What features do you want? | Dark mode | Notifications | Analytics | Themes`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "bb_poll_scheduled":
+        await db.update_session_state(user_id, "bb_creating_poll", {"poll_type": "scheduled"})
+        await query.message.edit_text(
+            "*Schedule a Poll*\n\n"
+            "Send your poll with schedule:\n\n"
+            "`Question | Option 1 | Option 2 | schedule=TIME`\n\n"
+            "Time formats:\n"
+            "- `schedule=30m` (in 30 minutes)\n"
+            "- `schedule=2h` (in 2 hours)\n"
+            "- `schedule=tomorrow 9am`\n\n"
+            "Example:\n"
+            "`Team lunch? | Pizza | Sushi | Tacos | schedule=1h`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("bb_addpoll_"):
+        bot_id = int(data.replace("bb_addpoll_", ""))
+        await db.update_session_state(user_id, "bb_adding_bot_poll", {"bot_id": bot_id})
+        await query.message.edit_text(
+            "*Add Poll to Bot*\n\n"
+            "This poll will be available via a command in your bot.\n\n"
+            "Send: `command_name | Question | Option 1 | Option 2 | ...`\n\n"
+            "Example:\n"
+            "`feedback | How was your experience? | Great | Good | Okay | Poor`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    # ==========================================================================
+    # BOT BUILDER - BUSINESS BOTS
+    # ==========================================================================
+    
+    elif data == "bb_business":
+        await bot_builder.show_business_bot_setup(update, context)
+    
+    elif data == "bb_create_business":
+        await db.update_session_state(user_id, "bb_business_name", {})
+        await query.message.edit_text(
+            "*Create Business Bot*\n\n"
+            "Let's set up your business bot!\n\n"
+            "First, tell me your *business name*:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "bb_biz_hours":
+        bots = await db.get_user_bots(user_id)
+        business_bots = [b for b in bots if b.get('bot_type') == 'business']
+        
+        if not business_bots:
+            await query.answer("Create a business bot first!", show_alert=True)
+            return
+        
+        await db.update_session_state(user_id, "bb_setting_hours", {"bot_id": business_bots[0]['id']})
+        await query.message.edit_text(
+            "*Set Working Hours*\n\n"
+            "Send your working hours:\n\n"
+            "Format: `DAY: START-END`\n\n"
+            "Example:\n"
+            "```\n"
+            "Mon-Fri: 9am-5pm\n"
+            "Sat: 10am-2pm\n"
+            "Sun: closed\n"
+            "```",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "bb_biz_away":
+        bots = await db.get_user_bots(user_id)
+        business_bots = [b for b in bots if b.get('bot_type') == 'business']
+        
+        if not business_bots:
+            await query.answer("Create a business bot first!", show_alert=True)
+            return
+        
+        await db.update_session_state(user_id, "bb_setting_away", {"bot_id": business_bots[0]['id']})
+        await query.message.edit_text(
+            "*Set Away Message*\n\n"
+            "This message will be sent when you're outside working hours.\n\n"
+            "Send your away message:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "bb_biz_quick":
+        bots = await db.get_user_bots(user_id)
+        business_bots = [b for b in bots if b.get('bot_type') == 'business']
+        
+        if not business_bots:
+            await query.answer("Create a business bot first!", show_alert=True)
+            return
+        
+        await db.update_session_state(user_id, "bb_adding_quick_reply", {"bot_id": business_bots[0]['id']})
+        await query.message.edit_text(
+            "*Add Quick Reply*\n\n"
+            "Quick replies auto-respond to common keywords.\n\n"
+            "Send: `keyword | response`\n\n"
+            "Example:\n"
+            "`hours | We're open Mon-Fri 9am-5pm!`\n"
+            "`pricing | Check our website for current pricing.`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    # ==========================================================================
+    # BOT BUILDER - CHANNEL BOTS
+    # ==========================================================================
+    
+    elif data == "bb_channel":
+        await bot_builder.show_channel_bot_setup(update, context)
+    
+    elif data == "bb_create_channel":
+        await db.update_session_state(user_id, "bb_channel_desc", {})
+        await query.message.edit_text(
+            "*Create Channel Bot*\n\n"
+            "I'll help you create a bot to manage your channel!\n\n"
+            "First, describe your channel or what kind of content you post:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "bb_ch_autopost":
+        bots = await db.get_user_bots(user_id)
+        channel_bots = [b for b in bots if b.get('bot_type') == 'channel']
+        
+        if not channel_bots:
+            await query.answer("Create a channel bot first!", show_alert=True)
+            return
+        
+        keyboard = [
+            [InlineKeyboardButton("RSS Feed", callback_data="bb_ch_rss")],
+            [InlineKeyboardButton("Social Media", callback_data="bb_ch_social")],
+            [InlineKeyboardButton("Custom Webhook", callback_data="bb_ch_webhook")],
+            [InlineKeyboardButton("Back", callback_data="bb_channel")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.edit_text(
+            "*Auto-Post Settings*\n\n"
+            "Choose a content source to auto-post from:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    
+    elif data == "bb_ch_schedule":
+        bots = await db.get_user_bots(user_id)
+        channel_bots = [b for b in bots if b.get('bot_type') == 'channel']
+        
+        if not channel_bots:
+            await query.answer("Create a channel bot first!", show_alert=True)
+            return
+        
+        await db.update_session_state(user_id, "bb_scheduling_post", {"bot_id": channel_bots[0]['id']})
+        await query.message.edit_text(
+            "*Schedule a Post*\n\n"
+            "Send your post content with schedule time:\n\n"
+            "Format:\n"
+            "`Your post content here\n"
+            "---\n"
+            "schedule: TIME`\n\n"
+            "Times: `30m`, `2h`, `tomorrow 9am`, `monday 10am`\n\n"
+            "You can also add:\n"
+            "- `buttons: Label|URL, Label2|URL2`\n"
+            "- `pin: true` to pin the post",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "bb_ch_polls":
+        await db.update_session_state(user_id, "bb_channel_poll", {})
+        await query.message.edit_text(
+            "*Channel Poll*\n\n"
+            "Create a poll for your channel.\n\n"
+            "Send: `Question | Option 1 | Option 2 | ...`\n\n"
+            "Optional settings:\n"
+            "- `anonymous=false` for public voting\n"
+            "- `close=24h` to auto-close\n\n"
+            "Example:\n"
+            "`What topic next? | AI Tutorials | Web Dev | DevOps | anonymous=false`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
     elif data == "start_chat":
         await query.message.reply_text(
-            "💬 Just chat with me! I can help with questions, coding, writing, and more."
+            "Just chat with me! I can help with questions, coding, writing, and more."
         )
     
     elif data == "show_profile":
