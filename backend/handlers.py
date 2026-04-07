@@ -68,6 +68,85 @@ async def send_buttons_message(update: Update, text: str, buttons: list):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(text, reply_markup=reply_markup)
 
+
+# Telegram message limit is 4096 characters
+TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+
+async def safe_reply_text(message, text: str, parse_mode=None, reply_markup=None, **kwargs):
+    """
+    Safely send a message, splitting it if it exceeds Telegram's 4096 character limit.
+    Returns the last message sent.
+    """
+    if not message:
+        return None
+    
+    if not text:
+        text = "..."
+    
+    # If message is within limit, send normally
+    if len(text) <= TELEGRAM_MAX_MESSAGE_LENGTH:
+        try:
+            return await message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup, **kwargs)
+        except Exception as e:
+            # If markdown fails, try without parse_mode
+            if parse_mode and "parse" in str(e).lower():
+                return await message.reply_text(text, reply_markup=reply_markup, **kwargs)
+            raise
+    
+    # Split long messages
+    chunks = []
+    current_chunk = ""
+    
+    # Try to split on paragraph boundaries first, then sentences, then words
+    paragraphs = text.split('\n\n')
+    
+    for para in paragraphs:
+        if len(current_chunk) + len(para) + 2 <= TELEGRAM_MAX_MESSAGE_LENGTH:
+            current_chunk += para + "\n\n"
+        else:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            
+            # If single paragraph is too long, split by sentences
+            if len(para) > TELEGRAM_MAX_MESSAGE_LENGTH:
+                sentences = para.replace('. ', '.|').split('|')
+                current_chunk = ""
+                for sentence in sentences:
+                    if len(current_chunk) + len(sentence) + 1 <= TELEGRAM_MAX_MESSAGE_LENGTH:
+                        current_chunk += sentence + " "
+                    else:
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                        # If single sentence is still too long, just truncate
+                        if len(sentence) > TELEGRAM_MAX_MESSAGE_LENGTH:
+                            chunks.append(sentence[:TELEGRAM_MAX_MESSAGE_LENGTH - 3] + "...")
+                            current_chunk = ""
+                        else:
+                            current_chunk = sentence + " "
+            else:
+                current_chunk = para + "\n\n"
+    
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    
+    # Send all chunks
+    last_msg = None
+    for i, chunk in enumerate(chunks):
+        try:
+            # Only add reply_markup to the last message
+            markup = reply_markup if i == len(chunks) - 1 else None
+            last_msg = await message.reply_text(chunk, parse_mode=parse_mode, reply_markup=markup, **kwargs)
+        except Exception as e:
+            # Try without parse_mode if it fails
+            if parse_mode and "parse" in str(e).lower():
+                markup = reply_markup if i == len(chunks) - 1 else None
+                last_msg = await message.reply_text(chunk, reply_markup=markup, **kwargs)
+            else:
+                raise
+    
+    return last_msg
+
+
 import database as db
 from ai_engine import (
     generate_response, generate_bot_suggestion, analyze_message_intent,
@@ -1077,12 +1156,12 @@ async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     translation = await translate_text(text_to_translate, target_lang)
     await db.increment_stat(update.effective_user.id, "total_ai_requests")
     
-    await update.message.reply_text(
+    response_text = (
         f"🌍 *Translation to {target_lang}:*\n\n"
         f"Original: _{text_to_translate}_\n\n"
-        f"Translated: *{translation}*",
-        parse_mode=ParseMode.MARKDOWN
+        f"Translated: *{translation}*"
     )
+    await safe_reply_text(update.message, response_text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1106,10 +1185,7 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     summary = await summarize_text(text_to_summarize)
     await db.increment_stat(update.effective_user.id, "total_ai_requests")
     
-    await update.message.reply_text(
-        f"📝 *Summary:*\n\n{summary}",
-        parse_mode=ParseMode.MARKDOWN
-    )
+    await safe_reply_text(update.message, f"📝 *Summary:*\n\n{summary}", parse_mode=ParseMode.MARKDOWN)
 
 
 async def quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1501,8 +1577,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.chat.send_action(ChatAction.TYPING)
             parsed = await parse_reminder_request(message_text)
             if parsed and "reminder_text" in parsed:
-                await db.create_reminder(user_id, parsed.get('reminder_text', reminder_text), 
-                                 reminder_time=parsed.get('datetime'))
+                # Parse the datetime from the AI response
+                remind_at = None
+                datetime_str = parsed.get('datetime')
+                if datetime_str:
+                    try:
+                        from datetime import datetime as dt
+                        remind_at = dt.fromisoformat(datetime_str.replace('Z', '+00:00'))
+                    except:
+                        # Default to 1 hour from now if parsing fails
+                        remind_at = datetime.now(timezone.utc) + timedelta(hours=1)
+                else:
+                    remind_at = datetime.now(timezone.utc) + timedelta(hours=1)
+                
+                await db.create_reminder(
+                    user_id=user_id, 
+                    title=parsed.get('reminder_text', reminder_text),
+                    remind_at=remind_at,
+                    repeat_type=parsed.get('repeat', 'none') or 'none'
+                )
                 await db.add_xp(user_id, 10)
                 await update.message.reply_text(f"✅ Reminder set!\n\n{parsed.get('reminder_text', reminder_text)[:100]}")
                 return
@@ -1600,7 +1693,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await db.increment_stat(user_id, "total_ai_requests")
             await db.increment_stat(user_id, "total_bot_interactions")
             
-            await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
+            # Use safe_reply_text for potentially long AI responses
+            await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
             return
     
     # Check for active personality
@@ -1673,11 +1767,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 if audio_bytes:
                     await update.message.reply_voice(io.BytesIO(audio_bytes), caption=f"🎤 Voice reply")
                 
-                # Also send text for readability
-                await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
+                # Also send text for readability - use safe_reply_text for long messages
+                await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
                 return
     
-    await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
+    # Use safe_reply_text to handle messages that exceed Telegram's 4096 char limit
+    await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
 
 
 # =====================================================
