@@ -163,20 +163,15 @@ HUME_API_KEY=your_hume_key
 After the bot is running, set up the Telegram webhook:
 
 ```bash
-# With domain (HTTPS)
-curl -X POST https://your-domain.com/set-webhook \
+# With your domain (HTTPS)
+curl -X POST https://waya.qzz.io/set-webhook \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://your-domain.com"}'
-
-# With IP only (HTTP - for testing)
-curl -X POST http://YOUR_IP:8000/set-webhook \
-  -H "Content-Type: application/json" \
-  -d '{"url": "http://YOUR_IP:8000"}'
+  -d '{"url": "https://waya.qzz.io"}'
 ```
 
 Check webhook status:
 ```bash
-curl http://localhost:8000/webhook-info
+curl https://waya.qzz.io/webhook-info
 ```
 
 ---
@@ -249,7 +244,7 @@ apt install nginx certbot python3-certbot-nginx -y
 cat > /etc/nginx/sites-available/wayabot << 'EOF'
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name waya.qzz.io;
 
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -266,12 +261,12 @@ ln -s /etc/nginx/sites-available/wayabot /etc/nginx/sites-enabled/
 nginx -t && systemctl restart nginx
 
 # Get SSL certificate
-certbot --nginx -d your-domain.com
+certbot --nginx -d waya.qzz.io
 
 # Set webhook with HTTPS
-curl -X POST https://your-domain.com/set-webhook \
+curl -X POST https://waya.qzz.io/set-webhook \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://your-domain.com"}'
+  -d '{"url": "https://waya.qzz.io"}'
 ```
 
 ---

@@ -81,7 +81,7 @@ if [ "$MODE" == "docker" ]; then
     echo "Set webhook:"
     echo "  curl -X POST http://localhost:8000/set-webhook \\"
     echo "    -H 'Content-Type: application/json' \\"
-    echo "    -d '{\"url\": \"http://YOUR_IP:8000\"}'"
+    echo "    -d '{\"url\": \"https://waya.qzz.io\"}'"
     
 elif [ "$MODE" == "local" ] || [ "$MODE" == "polling" ]; then
     echo -e "${GREEN}Starting locally...${NC}"

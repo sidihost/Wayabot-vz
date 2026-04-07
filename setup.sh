@@ -98,13 +98,13 @@ if [ ! -f .env ]; then
     echo ""
     read -p "Enter your Groq API Key: " GROQ_API_KEY
     
-    # Domain for webhook
+    # Domain for webhook (pre-filled with your domain)
     echo ""
     echo -e "${YELLOW}3. YOUR DOMAIN (for webhook)${NC}"
-    echo "   This should be your Droplet's domain or IP"
-    echo "   Example: bot.yourdomain.com or your Droplet IP"
+    echo "   Your domain: waya.qzz.io"
     echo ""
-    read -p "Enter your domain/IP: " BOT_DOMAIN
+    read -p "Enter your domain/IP [waya.qzz.io]: " BOT_DOMAIN
+    BOT_DOMAIN=${BOT_DOMAIN:-waya.qzz.io}
     
     # Database credentials
     echo ""
