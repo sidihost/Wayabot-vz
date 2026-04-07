@@ -5,19 +5,33 @@ An intelligent Telegram bot that helps users create custom bots, set reminders, 
 ## Features
 
 - **AI Chat with Streaming** - Real-time typing effect as AI responds
-- **Advanced Bot Builder** - Create powerful AI bots with cards, automation, and code export
+- **Advanced Bot Builder** - Create powerful AI bots with natural language
   - Create with AI: Describe what you want, get a working bot
   - Feature Cards: Select capabilities like auto-replies, scheduling, forms
-  - Template Library: Pre-built bots for business, education, lifestyle
+  - Template Library: 20+ pre-built bots for business, education, lifestyle
   - Bot Management: View, edit, delete, and share your bots
   - Knowledge Base: Train your bot with custom Q&A
   - Automations: Auto-reply rules for keywords
   - Export Code: Get standalone Python code for your bot
+- **Business Bots** - For Telegram Business accounts
+  - Working hours & away messages
+  - Quick replies for common questions
+  - Lead collection forms
+  - Customer support automation
+- **Channel Bots** - For channel management
+  - Schedule posts with buttons and pins
+  - Auto-post from RSS/webhooks
+  - Channel polls and quizzes
+  - Content formatting tools
+- **Polls & Quizzes** - Engagement tools
+  - Regular polls, quizzes, multi-answer
+  - Scheduled polls
+  - Anonymous or public voting
+  - Auto-closing polls
 - **Voice Messages** - Transcription with Groq Whisper + text-to-speech with ElevenLabs
 - **Smart Reminders** - Natural language ("remind me to call mom in 2 hours")
 - **Notes & Tasks** - Quick note-taking and task management
 - **AI Personalities** - Create custom AI personalities
-- **Emotion AI** - Empathic responses based on your mood
 - **Gamification** - XP, levels, streaks, and achievements
 
 ## Bot Builder - Full Feature List
@@ -80,6 +94,52 @@ change the greeting to be more professional
 - Bot is immediately active
 - AI greets users automatically
 - Export standalone Python code to run anywhere
+
+## Polls & Quizzes
+
+Create polls instantly with `/poll`:
+
+```
+/poll What's for lunch? | Pizza | Sushi | Tacos | Salad
+```
+
+Or use the interactive menu for more options:
+- **Regular Poll** - Simple voting
+- **Quiz** - With correct answer and explanation
+- **Multi-Answer** - Users can select multiple options
+- **Scheduled** - Auto-close after time
+
+### Quiz Example
+```
+What is 2+2? | 3 | 4 | 5 | correct=2 | explanation=Basic math!
+```
+
+## Business Bots
+
+Create bots for Telegram Business accounts:
+
+1. Use `/build` and select "Business Bot"
+2. Enter your business name
+3. Configure:
+   - Working hours
+   - Away messages
+   - Quick replies for FAQs
+   - Lead collection
+
+Your bot will automatically respond when you're away and handle common customer questions.
+
+## Channel Bots
+
+Create bots to manage your channels:
+
+1. Use `/build` and select "Channel Bot"
+2. Describe your channel content
+3. Add the bot as admin to your channel
+4. Features:
+   - Schedule posts with buttons
+   - Create channel polls
+   - Auto-post from RSS feeds
+   - Pin important messages
 
 ---
 
