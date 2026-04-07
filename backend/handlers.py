@@ -689,6 +689,13 @@ async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     title = parsed.get("title", task_text)
     description = parsed.get("description")
     priority = parsed.get("priority", "normal")
+    
+    # Validate and map priority to allowed values
+    VALID_PRIORITIES = {"low", "normal", "high", "urgent"}
+    PRIORITY_MAP = {"medium": "normal", "critical": "urgent", "important": "high"}
+    if priority not in VALID_PRIORITIES:
+        priority = PRIORITY_MAP.get(priority.lower() if priority else "normal", "normal")
+    
     due_date = None
     
     if parsed.get("due_date"):
