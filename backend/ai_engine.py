@@ -1,6 +1,6 @@
 """
 Waya Bot Builder - AI Engine Module
-Powered by Groq AI for ultra-fast intelligent responses.
+🏆 MAX POWER: Llama 4 + Whisper + COMPOUND (Agentic AI with tools)!
 """
 
 import os
@@ -8,6 +8,106 @@ import json
 from typing import Optional, Dict, Any, List
 from groq import AsyncGroq
 from datetime import datetime
+
+# 🏆 BEST Groq Models
+BEST_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # FASTEST & SMARTEST
+REASONING_MODEL = "deepseek-ai/DeepSeek-R1"
+
+# 🎙 Whisper - FASTEST transcription
+WHISPER_MODEL = "whisper-large-v3-turbo"
+
+# 🤖 COMPOUND - Agentic AI with TOOLS!
+COMPOUND_MODEL = "compound-beta"  # Web search + code execution!
+
+
+async def compound_response(user_message: str, conversation_history: list = None) -> str:
+    """
+    🤖 COMPOUND - Agentic AI with tools!
+    Web search, code execution, visit websites autonomously!
+    """
+    client = get_groq_client()
+    
+    system_msg = """You are an advanced AI with tools:
+- Web search for current info
+- Code execution  
+- Visit websites
+
+Be helpful, concise. Use tools when needed."""
+    
+    messages = [{"role": "system", "content": system_msg}]
+    
+    if conversation_history:
+        for msg in conversation_history[-10:]:
+            messages.append({"role": msg.get("role"), "content": msg.get("content")})
+    
+    messages.append({"role": "user", "content": user_message})
+    
+    try:
+        response = await client.chat.completions.create(
+            model=COMPOUND_MODEL,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=2000
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Compound error: {e}")
+        return await generate_response(user_message, conversation_history)
+
+
+# Initialize client
+groq_client: Optional[AsyncGroq] = None
+
+
+async def transcribe_voice(audio_bytes: bytes, prompt: str = None) -> str:
+    """
+    🎙 Transcribe voice using Groq Whisper - FASTEST!
+    Voice → Text in milliseconds!
+    """
+    client = get_groq_client()
+    
+    import io
+    audio_file = io.BytesIO(audio_bytes)
+    audio_file.name = "voice.ogg"
+    
+    try:
+        transcription = await client.audio.transcriptions.create(
+            file=audio_file,
+            model=WHISPER_MODEL,
+            prompt=prompt or "Transcribe this voice message. It's a Telegram voice message.",
+            response_format="text",
+            temperature=0.0
+        )
+        return transcription.text
+    except Exception as e:
+        print(f"Whisper error: {e}")
+        return None
+
+
+async def translate_audio(audio_bytes: bytes, target_language: str = "en") -> str:
+    """
+    🌐 Translate audio to text in target language!
+    Uses Groq Whisper translation.
+    """
+    client = get_groq_client()
+    
+    import io
+    audio_file = io.BytesIO(audio_bytes)
+    audio_file.name = "voice.ogg"
+    
+    try:
+        translation = await client.audio.translations.create(
+            file=audio_file,
+            model="whisper-large-v3",
+            language=target_language,
+            response_format="text",
+            temperature=0.0
+        )
+        return translation.text
+    except Exception as e:
+        print(f"Translation error: {e}")
+        return None
+
 
 # Initialize Groq client
 groq_client: Optional[AsyncGroq] = None
@@ -179,7 +279,7 @@ Respond in a {response_style} manner. Adapt your tone and language accordingly:
     
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens
@@ -218,7 +318,7 @@ Be warm, helpful, and attentive. Adapt your tone based on what they need."""
     
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
@@ -232,49 +332,67 @@ Be warm, helpful, and attentive. Adapt your tone based on what they need."""
 
 
 async def generate_bot_suggestion(user_request: str) -> Dict[str, Any]:
-    """Generate a bot configuration suggestion based on user request."""
+    """Generate COMPLETE bot with code - fully autonomous AI builder."""
     client = get_groq_client()
     
-    prompt = f"""Based on the following user request, suggest a bot configuration.
-    
+    # This is the key - AI writes actual code, not just config!
+    prompt = f"""You're an expert Telegram bot developer. Create a COMPLETE working bot based on user request.
+
 User Request: {user_request}
 
-Respond with a JSON object containing:
+Create a full bot configuration. Respond with JSON:
 {{
-    "bot_name": "suggested name for the bot",
-    "bot_description": "brief description",
-    "bot_type": "one of: customer_support, faq, personal_assistant, quiz_master, creative_writer, code_helper, language_tutor, health_coach, news_curator, general",
-    "suggested_commands": ["list of suggested commands like /start, /help, etc."],
-    "suggested_triggers": ["keywords that should trigger responses"],
-    "greeting_message": "suggested greeting message",
-    "features": ["list of recommended features"],
-    "customization_tips": ["tips for customizing the bot"]
+    "bot_name": "ShortNameForBot",
+    "bot_description": "What this bot does (2 sentences max)",
+    "bot_type": "general", 
+    "system_prompt": "You are [bot name]. [description]. Be helpful, concise, and [personality traits].",
+    "greeting_message": "Hey! I'm [name]. [what I do]. How can I help you?",
+    "features": ["feature 1", "feature 2", "feature 3"],
+    "commands": [
+        {{"command": "/help", "description": "Get help"}},
+        {{"command": "/example", "description": "Example action"}}
+    ],
+    "code_example": "Optional: if there's a specific function needed, show brief Python code here",
+    "response_templates": {{
+        "greeting": "Hey! I'm [name]. [what I do]. How can I help?",
+        "help": "Available commands: /help, /example",
+        "fallback": "I didn't get that. Try /help for options."
+    }}
 }}
 
-Only respond with valid JSON, no additional text."""
+IMPORTANT:
+- Keep it SIMPLE - not too many features
+- Make it 3 features max
+- system_prompt should be natural and conversational
+- greeting should be short and friendly
+
+Respond ONLY with valid JSON."""
 
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
-                {"role": "system", "content": "You are a bot configuration expert. Respond only with valid JSON."},
+                {"role": "system", "content": "You are an expert Telegram bot developer. Create simple, working bots. Be concise."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=1024
+            max_tokens=1500
         )
         
         result = response.choices[0].message.content
-        # Try to extract JSON from the response
         try:
-            return json.loads(result)
+            config = json.loads(result)
+            # Add the original request for reference
+            config['user_original_request'] = user_request
+            return config
         except json.JSONDecodeError:
-            # Try to find JSON in the response
             import re
             json_match = re.search(r'\{[\s\S]*\}', result)
             if json_match:
-                return json.loads(json_match.group())
-            return {"error": "Could not parse bot suggestion", "raw": result}
+                config = json.loads(json_match.group())
+                config['user_original_request'] = user_request
+                return config
+            return {"error": "Could not create bot", "raw": result}
     except Exception as e:
         return {"error": str(e)}
 
@@ -302,7 +420,7 @@ Only respond with valid JSON."""
 
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
                 {"role": "system", "content": "You are a message intent analyzer. Respond only with valid JSON."},
                 {"role": "user", "content": prompt}
@@ -347,7 +465,7 @@ Only respond with valid JSON."""
 
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
                 {"role": "system", "content": "You are a datetime parsing expert. Respond only with valid JSON."},
                 {"role": "user", "content": prompt}
@@ -390,7 +508,7 @@ Only respond with valid JSON."""
 
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
                 {"role": "system", "content": "You are a task parsing expert. Respond only with valid JSON."},
                 {"role": "user", "content": prompt}
@@ -418,7 +536,7 @@ async def summarize_text(text: str, max_length: int = 200) -> str:
     
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
                 {"role": "system", "content": f"Summarize the following text in {max_length} words or less. Be concise and capture the key points."},
                 {"role": "user", "content": text}
@@ -437,7 +555,7 @@ async def translate_text(text: str, target_language: str) -> str:
     
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
                 {"role": "system", "content": f"Translate the following text to {target_language}. Provide only the translation, no explanations."},
                 {"role": "user", "content": text}
@@ -468,7 +586,7 @@ Only respond with valid JSON."""
 
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
                 {"role": "system", "content": "You are a quiz question generator. Respond only with valid JSON."},
                 {"role": "user", "content": prompt}
@@ -508,7 +626,7 @@ Only respond with valid JSON array."""
 
     try:
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=BEST_MODEL,
             messages=[
                 {"role": "system", "content": "You are a helpful assistant suggesting next actions. Respond only with a JSON array."},
                 {"role": "user", "content": prompt}

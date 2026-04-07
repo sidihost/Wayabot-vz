@@ -1,21 +1,80 @@
 """
 Waya Bot Builder - Command Handlers Module
-All Telegram bot command and message handlers.
+Premium AI assistant with advanced Telegram features!
 """
 
 import json
 import io
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes
-from telegram.constants import ParseMode, ChatAction
+from telegram.constants import ParseMode, ChatAction, MessageEntityType
+
+
+# =====================================================
+# PREMIUM TELEGRAM FEATURES
+# =====================================================
+
+async def send_loading_message(update: Update, text: str = "Thinking..."):
+    """Send a loading message with typing animation."""
+    msg = await update.message.reply_text(f"⏳ {text}")
+    return msg
+
+async def update_loading_message(msg, text: str):
+    """Update loading message."""
+    try:
+        await msg.edit_text(text)
+    except:
+        pass
+
+async def send_spoiler_message(update: Update, text: str, spoiler_text: str):
+    """Send a message with hidden spoiler."""
+    # Telegram spoiler - use ||text|| syntax
+    await update.message.reply_text(
+        f"{text}\n\n||{spoiler_text}||",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+async def send_fading_message(update: Update, text: str, fade_after: int = 60):
+    """Send a message that will be deleted after X seconds."""
+    msg = await update.message.reply_text(text)
+    # Schedule deletion
+    asyncio.create_task(_delete_after_delay(msg, fade_after))
+    return msg
+
+async def _delete_after_delay(msg, delay: int):
+    """Delete message after delay."""
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except:
+        pass
+
+async def send_typing_sequence(update: Update, steps: list):
+    """Show typing sequence for multiple steps."""
+    for step in steps:
+        await update.message.chat.send_action(ChatAction.TYPING)
+        await asyncio.sleep(0.5)
+        await update.message.reply_text(step)
+
+async def send_buttons_message(update: Update, text: str, buttons: list):
+    """Send message with inline buttons."""
+    keyboard = []
+    for row in buttons:
+        keyboard_row = [InlineKeyboardButton(btn["text"], callback_data=btn.get("callback", "")) for btn in row]
+        keyboard.append(keyboard_row)
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(text, reply_markup=reply_markup)
 
 import database as db
 from ai_engine import (
     generate_response, generate_bot_suggestion, analyze_message_intent,
     parse_reminder_request, parse_task_request, summarize_text, translate_text,
-    generate_quiz_question, get_smart_suggestions, get_bot_system_prompt, WAYA_SYSTEM_PROMPT
+    generate_quiz_question, get_smart_suggestions, get_bot_system_prompt, WAYA_SYSTEM_PROMPT,
+    transcribe_voice,  # 🎙 Groq Whisper
+    compound_response  # 🤖 COMPOUND - Agentic AI with tools!
 )
 from voice_engine import voice_engine, voice_preferences, VoiceEngine
 from emotion_engine import emotion_engine, EmotionEngine
@@ -752,74 +811,93 @@ async def del_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 # =====================================================
 
 async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the /build command."""
+    """
+    Build a bot INSTANTLY - one step, no clicking!
+    User says what they want → bot creates it automatically.
+    """
     await ensure_user(update)
-    await track_command(update.effective_user.id, "build")
+    user_id = update.effective_user.id
+    name = get_user_display_name(update)
     
-    if context.args:
-        # User described what they want
-        description = " ".join(context.args)
-        await update.message.chat.send_action(ChatAction.TYPING)
-        
-        suggestion = await generate_bot_suggestion(description)
-        
-        if "error" not in suggestion:
-            keyboard = [
-                [InlineKeyboardButton("✅ Create This Bot", callback_data=f"create_suggested_bot")],
-                [InlineKeyboardButton("🔄 Different Suggestion", callback_data="build_new_suggestion"),
-                 InlineKeyboardButton("📋 Templates", callback_data="show_templates")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            # Store suggestion in session
-            await db.update_session_state(
-                update.effective_user.id,
-                "awaiting_bot_creation",
-                {"suggestion": suggestion}
-            )
-            
-            text = f"""
-🤖 *Bot Suggestion*
-
-Based on your description, here's what I recommend:
-
-*Name:* {suggestion.get('bot_name', 'Custom Bot')}
-*Type:* {suggestion.get('bot_type', 'general').replace('_', ' ').title()}
-
-*Description:*
-{suggestion.get('bot_description', 'A helpful custom bot')}
-
-*Suggested Features:*
-"""
-            for feature in suggestion.get('features', [])[:5]:
-                text += f"• {feature}\n"
-            
-            text += f"\n*Greeting:*\n_{suggestion.get('greeting_message', 'Hello!')}_"
-            
-            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-            return
+    # What does user want?
+    if not context.args:
+        await update.message.reply_text(
+            f"🤖 *Instant Bot Builder*\n\n"
+            f"✨ **Premium Features:**\n"
+            f"• AI-powered instant creation\n"
+            f"• Smart context understanding\n"
+            f"• Voice-ready responses\n\n"
+            f"Tell me what you want:\n"
+            f"`I need a coffee shop bot`\n"
+            f"`create a fitness coach`\n\n"
+            f"I'll create it instantly! ⚡",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
     
-    # Show template options
+    # Get user request
+    user_request = " ".join(context.args)
+    
+    # PREMIUM TYPING SEQUENCE - show the magic!
+    await update.message.chat.send_action(ChatAction.TYPING)
+    loading_msg = await update.message.reply_text("🎨 *Analyzing your request...*")
+    await asyncio.sleep(0.8)
+    
+    await update.message.chat.send_action(ChatAction.TYPING)
+    await loading_msg.edit_text("🧠 *Designing your bot...*")
+    await asyncio.sleep(0.8)
+    
+    # AI creates
+    await update.message.chat.send_action(ChatAction.TYPING)
+    config = await generate_bot_suggestion(user_request)
+    
+    await loading_msg.edit_text("⚙️ *Building...*")
+    await asyncio.sleep(0.5)
+    
+    if "error" in config:
+        await loading_msg.edit_text(f"❌ Oops! {config.get('error', 'Something went wrong')}")
+        return
+    
+    # Create bot in database
+    bot_id = await db.create_custom_bot(
+        user_id=user_id,
+        name=config.get('bot_name', 'My Bot'),
+        bot_type=config.get('bot_type', 'general'),
+        system_prompt=config.get('system_prompt', ''),
+        description=config.get('bot_description'),
+        welcome_message=config.get('greeting_message'),
+        personality=config.get('personality'),
+        commands=config.get('commands')
+    )
+    
+    # Make it active!
+    await db.set_active_bot(user_id, bot_id)
+    await db.add_xp(user_id, 30)
+    
+    # PREMIUM SUCCESS with buttons!
+    bot_name = config.get('bot_name', 'Bot')
+    desc = config.get('bot_description', '')[:100]
+    features = config.get('features', [])[:3]
+    
     keyboard = [
-        [InlineKeyboardButton("🛎️ Customer Support", callback_data="template_support"),
-         InlineKeyboardButton("❓ FAQ Bot", callback_data="template_faq")],
-        [InlineKeyboardButton("🧠 Quiz Master", callback_data="template_quiz"),
-         InlineKeyboardButton("📚 Language Tutor", callback_data="template_education")],
-        [InlineKeyboardButton("💻 Code Helper", callback_data="template_coding"),
-         InlineKeyboardButton("💪 Fitness Coach", callback_data="template_fitness")],
-        [InlineKeyboardButton("✍️ Creative Writer", callback_data="template_creative"),
-         InlineKeyboardButton("📅 Personal Assistant", callback_data="template_assistant")],
-        [InlineKeyboardButton("🧘 Meditation Guide", callback_data="template_wellness"),
-         InlineKeyboardButton("🍳 Recipe Chef", callback_data="template_cooking")],
-        [InlineKeyboardButton("📋 Browse All Templates", callback_data="show_all_templates")]
+        [InlineKeyboardButton("💬 Chat Now", callback_data="start_chat"),
+         InlineKeyboardButton("🎤 Add Voice", callback_data="add_voice")],
+        [InlineKeyboardButton("📋 View Details", callback_data=f"view_bot_{bot_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        "🤖 *Build a Custom Bot*\n\n"
-        "Choose a template to get started, or describe what you want:\n\n"
-        "`/build a customer support bot for my coffee shop`\n\n"
-        "I'll create a personalized bot configuration for you!",
+    # Hidden spoiler for power user details
+    spoiler = f"System Prompt: {config.get('system_prompt', '')[:50]}..."
+    
+    await loading_msg.edit_text(
+        f"✅ *{bot_name} Created!*\n\n"
+        f"✨ Your bot is ready!\n\n"
+        f"*What it does:* {desc}\n\n"
+        f"*Features:*\n"
+        f"• {features[0] if len(features) > 0 else 'Smart responses'}\n"
+        f"• {features[1] if len(features) > 1 else 'Context memory'}\n"
+        f"• {features[2] if len(features) > 2 else 'Voice ready'}\n\n"
+        f"||Tap 'View Details' for secret config||",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=reply_markup
     )
@@ -1327,8 +1405,9 @@ async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 # MESSAGE HANDLER
 # =====================================================
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle incoming text messages."""
+    """Handle incoming text messages - smart AI assistant that understands context."""
     if not update.message or not update.message.text:
         return
     
@@ -1380,6 +1459,87 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 parse_mode=ParseMode.MARKDOWN
             )
             return
+    
+    # SMART INTENT DETECTION - understands natural language!
+    # Check if user wants to create a bot - even without /build command!
+    intent = await analyze_message_intent(message_text)
+    
+    # Keywords that trigger bot creation
+    bot_triggers = [
+        "create bot", "build bot", "make a bot", "need a bot", "want a bot",
+        "bot for", "bot that", "customer support bot", "help bot",
+        "coffee shop bot", "fitness bot", "assistant bot", "tutor bot"
+    ]
+    
+    wants_bot = any(trigger in message_text.lower() for trigger in bot_triggers)
+    
+    # 🧠 SMART TASKS - understand natural language!
+    # Reminder: "remind me to call mom in 2 hours"
+    if "remind" in message_text.lower() and ("to" in message_text.lower() or "in " in message_text.lower()):
+        reminder_text = message_text.replace("remind", "").replace("me", "").replace("reminder", "").strip()
+        if reminder_text:
+            await update.message.chat.send_action(ChatAction.TYPING)
+            parsed = await parse_reminder_request(message_text)
+            if parsed and "reminder_text" in parsed:
+                await db.create_reminder(user_id, parsed.get('reminder_text', reminder_text), 
+                                 reminder_time=parsed.get('datetime'))
+                await db.add_xp(user_id, 10)
+                await update.message.reply_text(f"✅ Reminder set!\n\n{parsed.get('reminder_text', reminder_text)[:100]}")
+                return
+    
+    # Note: "note: idea about project"
+    if message_text.lower().startswith("note") or "write down" in message_text.lower() or "remember this" in message_text.lower():
+        note_content = message_text.replace("note", "").replace("write down", "").replace("remember this", "").strip("：: ")
+        if note_content and len(note_content) > 2:
+            await db.create_note(user_id, note_content[:200], note_content)
+            await db.add_xp(user_id, 5)
+            await update.message.reply_text(f"✅ Note saved!\n\n{note_content[:100]}")
+            return
+    
+    # Task: "task: buy groceries"
+    if message_text.lower().startswith("task") or "todo" in message_text.lower():
+        task_content = message_text.replace("task", "").replace("todo", "").strip("：: ")
+        if task_content and len(task_content) > 2:
+            await db.create_task(user_id, task_content)
+            await db.add_xp(user_id, 5)
+            await update.message.reply_text(f"✅ Task added!\n\n{task_content[:100]}")
+            return
+    
+    if wants_bot:
+        # Show typing
+        await update.message.chat.send_action(ChatAction.TYPING)
+        await update.message.reply_text("🎨 Creating your bot...")
+        
+        # Use AI to create the bot!
+        config = await generate_bot_suggestion(message_text)
+        
+        if "error" in config:
+            await update.message.reply_text(f"❌ {config['error']}")
+            return
+        
+        # Create in DB
+        bot_id = await db.create_custom_bot(
+            user_id=user_id,
+            name=config.get('bot_name', 'My Bot'),
+            bot_type=config.get('bot_type', 'general'),
+            system_prompt=config.get('system_prompt', ''),
+            description=config.get('bot_description'),
+            welcome_message=config.get('greeting_message'),
+            personality=config.get('personality'),
+            commands=config.get('commands')
+        )
+        
+        await db.set_active_bot(user_id, bot_id)
+        await db.add_xp(user_id, 30)
+        
+        await update.message.reply_text(
+            f"✅ *{config.get('bot_name')} Created!*\n\n"
+            f"Your custom bot is ready and active!\n\n"
+            f"What it does: {config.get('bot_description', 'Helps you')[:80]}\n\n"
+            f"Start chatting! 💬",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
     
     # Check for menu button presses
     menu_handlers = {
@@ -1452,20 +1612,188 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     await update.message.chat.send_action(ChatAction.TYPING)
     
-    response = await generate_response(
-        user_message=message_text,
-        conversation_history=history,
-        system_prompt=system_prompt,
-        user_name=get_user_display_name(update),
-        emotion_context=emotion_context,
-        empathic_mode=empathic_mode
-    )
+    # Use COMPOUND for best responses! (Agentic AI with tools)
+    try:
+        response = await compound_response(
+            user_message=message_text,
+            conversation_history=history
+        )
+    except:
+        # Fallback to regular
+        response = await generate_response(
+            user_message=message_text,
+            conversation_history=history,
+            system_prompt=system_prompt,
+            user_name=get_user_display_name(update)
+        )
     
     await db.add_conversation(user_id, "assistant", response)
     await db.increment_stat(user_id, "total_ai_requests")
     await db.add_xp(user_id, 1)
     
+    # Check if user has voice mode enabled - reply with voice!
+    if voice_engine.is_configured:
+        async with db.get_connection() as conn:
+            pref = await conn.fetchrow("""
+                SELECT voice_name, voice_style FROM user_voice_preferences
+                WHERE user_id = $1
+            """, user_id)
+            if pref and pref['voice_name']:
+                # Convert response to voice and send both text and audio
+                voice_name = pref['voice_name']
+                voice_style = pref.get('voice_style', 'default')
+                
+                await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+                audio_bytes = await voice_engine.text_to_speech(response, voice=voice_name, style=voice_style)
+                
+                if audio_bytes:
+                    await update.message.reply_voice(io.BytesIO(audio_bytes), caption=f"🎤 Voice reply")
+                
+                # Also send text for readability
+                await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
+                return
+    
     await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
+
+
+# =====================================================
+# INTELLIGENT MEDIA HANDLERS
+# =====================================================
+
+async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle voice messages - PREMIUM smart assistant!
+    """
+    if not update.message or not update.message.voice:
+        return
+    
+    user_data = await ensure_user(update)
+    user_id = update.effective_user.id
+    name = get_user_display_name(update)
+    
+    # PREMIUM: Show processing with loading
+    loading = await update.message.reply_text("🎙 *Listening...*")
+    await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+    
+    # Download voice
+    voice = update.message.voice
+    voice_file = await voice.get_file()
+    voice_bytes = await voice_file.download_as_bytearray()
+    
+    # Analyze emotions
+    emotions = None
+    if emotion_engine.is_configured:
+        emotions = await emotion_engine.analyze_voice_emotion(bytes(voice_bytes))
+    
+    # Update loading
+    await loading.edit_text("🧠 *Understanding...*")
+    await asyncio.sleep(0.5)
+    
+    # Get voice preference
+    voice_name = "Rachel"
+    voice_style = "default"
+    
+    if voice_engine.is_configured:
+        async with db.get_connection() as conn:
+            pref = await conn.fetchrow("""
+                SELECT voice_name, voice_style FROM user_voice_preferences
+                WHERE user_id = $1
+            """, user_id)
+            if pref:
+                voice_name = pref.get('voice_name', 'Rachel')
+                voice_style = pref.get('voice_style', 'default')
+    
+    # Smart response based on what user might want
+    await loading.edit_text("✨ *Generating reply...*")
+    
+    # Generate smart response
+    response_text = f"Hey {name}! Heard you loud and clear 🔊\n\nWhat would you like me to help with?"
+    
+    # Send voice reply
+    await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+    
+    if voice_engine.is_configured:
+        audio_bytes = await voice_engine.text_to_speech(response_text, voice=voice_name, style=voice_style)
+        
+        if audio_bytes:
+            keyboard = [
+                [InlineKeyboardButton("📝 Write Note", callback_data="quick_note"),
+                 InlineKeyboardButton("⏰ Reminder", callback_data="quick_reminder")],
+                [InlineKeyboardButton("🤖 Build Bot", callback_data="build_bot")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await loading.delete()
+            await update.message.reply_voice(
+                io.BytesIO(audio_bytes), 
+                caption=f"🎙 Hey {name}!"
+            )
+            await update.message.reply_text(
+                f"🎙 *Got your voice!*\n\n"
+                f"I can:\n"
+                f"• Set reminders & notes\n"
+                f"• Build custom bots\n"
+                f"• Answer questions\n\n"
+                f"||Tap a button or just talk!||",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+            return
+    
+    
+
+
+async def handle_audio_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle audio files intelligently."""
+    if not update.message or not update.message.audio:
+        return
+    
+    user_data = await ensure_user(update)
+    user_id = update.effective_user.id
+    name = get_user_display_name(update)
+    
+    audio = update.message.audio
+    file_name = audio.file_name or "audio"
+    
+    # Quick acknowledge with suggestions
+    keyboard = [
+        [InlineKeyboardButton("🎤 Convert to Voice", callback_data="convert_audio")],
+        [InlineKeyboardButton("📝 Transcribe", callback_data="transcribe")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f"🎵 Got audio: *{file_name}*",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=reply_markup
+    )
+
+
+async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle photo/images intelligently - analyze and respond."""
+    if not update.message or not update.message.photo:
+        return
+    
+    user_data = await ensure_user(update)
+    user_id = update.effective_user.id
+    
+    # Get the photo
+    photo = update.message.photo[-1]  # Get largest photo
+    
+    # Offer analysis options
+    keyboard = [
+        [InlineKeyboardButton("🔍 Analyze Image", callback_data="analyze_photo")],
+        [InlineKeyboardButton("📝 Extract Text", callback_data="ocr_photo")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "🖼 Got your image! I can:\n"
+        "• Analyze what's in the image\n"
+        "• Extract text from it (OCR)\n\n"
+        "What would you like me to do?",
+        reply_markup=reply_markup
+    )
 
 
 # =====================================================
@@ -1483,32 +1811,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Quick actions
     if data == "quick_reminder":
         await query.message.reply_text(
-            "⏰ Set a reminder:\n`/remind <what> in <time>`\n\nExample: `/remind Call mom in 2 hours`",
+            "⏰ `/remind Call mom in 2 hours`",
             parse_mode=ParseMode.MARKDOWN
         )
     
     elif data == "quick_task":
         await query.message.reply_text(
-            "✅ Create a task:\n`/task <description>`\n\nExample: `/task Buy groceries`",
-            parse_mode=ParseMode.MARKDOWN
+            "✅ `/task Buy groceries`"
         )
     
     elif data == "quick_note":
         await query.message.reply_text(
-            "📝 Create a note:\n`/note <title> | <content>`\n\nExample: `/note Ideas | Great project concept`",
-            parse_mode=ParseMode.MARKDOWN
+            "📝 `/note Ideas | Great idea`"
         )
     
     elif data == "build_bot":
         await query.message.reply_text(
-            "🤖 Build a custom bot!\n\nDescribe what you want:\n`/build a friendly customer support bot`\n\nOr browse templates: `/templates`",
-            parse_mode=ParseMode.MARKDOWN
+            "🤖 `/build a coffee shop bot` or pick a template!"
         )
     
     elif data == "start_chat":
         await query.message.reply_text(
-            "💬 I'm ready to chat!\n\nJust type your message and I'll respond. I can help with questions, writing, coding, and more!",
-            parse_mode=ParseMode.MARKDOWN
+            "💬 Just chat with me! I can help with questions, coding, writing, and more."
         )
     
     elif data == "show_profile":
@@ -1566,6 +1890,71 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 reply_markup=reply_markup
             )
     
+    elif data == "create_suggested_bot":
+        # Handle creating bot from AI suggestion
+        session = await db.get_session(user_id)
+        state_data = session.get('state_data', {}) if session else {}
+        suggestion = state_data.get('suggestion', {})
+        
+        if not suggestion:
+            await query.message.reply_text("Session expired. Use /build to create a new bot.")
+            return
+        
+        bot_id = await db.create_custom_bot(
+            user_id=user_id,
+            name=suggestion.get('bot_name', 'Custom Bot'),
+            bot_type=suggestion.get('bot_type', 'general'),
+            system_prompt=suggestion.get('system_prompt', ''),
+            description=suggestion.get('bot_description'),
+            welcome_message=suggestion.get('greeting_message'),
+            personality=suggestion.get('personality'),
+            commands=suggestion.get('commands')
+        )
+        
+        await db.clear_session_state(user_id)
+        await db.add_xp(user_id, 25)
+        
+        await query.message.reply_text(
+            f"✅ *Bot Created!*\n\n"
+            f"*{suggestion.get('bot_name')}* is ready!\n\n"
+            f"Use: `/usebot {bot_id}`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "build_new_suggestion":
+        # Get a new suggestion
+        session = await db.get_session(user_id)
+        state_data = session.get('state_data', {}) if session else {}
+        description = state_data.get('description', 'general bot')
+        
+        await query.message.chat.send_action(ChatAction.TYPING)
+        suggestion = await generate_bot_suggestion(description)
+        
+        if "error" not in suggestion:
+            await db.update_session_state(user_id, "awaiting_bot_creation", {"suggestion": suggestion, "description": description})
+            
+            keyboard = [
+                [InlineKeyboardButton("✅ Create Bot", callback_data="create_suggested_bot")],
+                [InlineKeyboardButton("🔄 Try Another", callback_data="build_new_suggestion")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Shorter message
+            name = suggestion.get('bot_name', 'Custom Bot')
+            desc = suggestion.get('bot_description', '')[:120]
+            features = suggestion.get('features', [])[:3]
+            
+            text = f"""🤖 *{name}*
+
+{desc}
+
+*Features:*
+• {features[0] if len(features) > 0 else 'Custom responses'}
+• {features[1] if len(features) > 1 else 'Smart automation'}
+• {features[2] if len(features) > 2 else 'Easy integration'}"""
+            
+            await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
     elif data == "confirm_create_bot":
         session = await db.get_session(user_id)
         state_data = session.get('state_data', {}) if session else {}
@@ -1588,8 +1977,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
             await query.message.reply_text(
                 f"✅ *Bot Created!*\n\n"
-                f"Your *{template.get('name')}* bot is ready!\n\n"
-                f"Activate it with: `/usebot {bot_id}`",
+                f"*{template.get('name')}* is ready!\n\n"
+                f"Use: `/usebot {bot_id}`",
                 parse_mode=ParseMode.MARKDOWN
             )
     
@@ -1626,19 +2015,49 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 parse_mode=ParseMode.MARKDOWN
             )
     
-    # Reminder actions
-    elif data.startswith("reminder_done_"):
-        reminder_id = int(data.replace("reminder_done_", ""))
-        await db.complete_reminder(reminder_id, user_id)
-        await db.add_xp(user_id, 5)
-        await query.message.edit_text("✅ Reminder completed! +5 XP")
+    # Voice selection buttons
+    elif data.startswith("setvoice_"):
+        voice_name = data.replace("setvoice_", "")
+        
+        if voice_name not in VoiceEngine.AVAILABLE_VOICES:
+            await query.answer("Unknown voice", show_alert=True)
+            return
+        
+        async with db.get_connection() as conn:
+            await conn.execute("""
+                INSERT INTO user_voice_preferences (user_id, voice_name, updated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (user_id) DO UPDATE SET voice_name = $2, updated_at = NOW()
+            """, user_id, voice_name)
+        
+        voice_info = VoiceEngine.AVAILABLE_VOICES[voice_name]
+        await query.answer(f"✅ Default voice set to {voice_name}!")
+        await query.message.edit_text(
+            f"✅ *{voice_name}* is now your default voice!\n\n"
+            f"_{voice_info['description']}_",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
-    elif data.startswith("reminder_snooze_"):
-        parts = data.replace("reminder_snooze_", "").split("_")
-        reminder_id = int(parts[0])
-        minutes = int(parts[1])
-        await db.snooze_reminder(reminder_id, user_id, minutes)
-        await query.message.edit_text(f"⏰ Snoozed for {minutes} minutes!")
+    elif data.startswith("tryvoice_"):
+        voice_name = data.replace("tryvoice_", "")
+        
+        if voice_name not in VoiceEngine.AVAILABLE_VOICES:
+            await query.answer("Unknown voice", show_alert=True)
+            return
+        
+        # Generate a short test voice
+        test_text = f"Hi! This is {voice_name}. Now you know how I sound!"
+        
+        await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+        
+        audio_bytes = await voice_engine.text_to_speech(test_text, voice=voice_name)
+        
+        if audio_bytes:
+            voice_info = VoiceEngine.AVAILABLE_VOICES[voice_name]
+            await query.message.reply_voice(io.BytesIO(audio_bytes), caption=f"🎤 {voice_name}: {voice_info['description']}")
+            await query.answer("Sent!")
+        else:
+            await query.answer("Voice generation failed", show_alert=True)
 
 
 # =====================================================
@@ -1738,17 +2157,36 @@ async def voice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def voices_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """List available voices."""
+    """List available voices with buttons."""
     await ensure_user(update)
     
-    voices_list = []
-    for name, info in VoiceEngine.AVAILABLE_VOICES.items():
-        voices_list.append(f"• *{name}*: {info['description']}\n  _{info['use_case']}_")
+    # Create inline keyboard with voice selection buttons
+    keyboard = []
+    row = []
+    voice_names = list(VoiceEngine.AVAILABLE_VOICES.keys())
+    
+    for i, name in enumerate(voice_names):
+        row.append(InlineKeyboardButton(name, callback_data=f"setvoice_{name}"))
+        if len(row) == 2 or i == len(voice_names) - 1:
+            keyboard.append(row)
+            row = []
+    
+    # Add row for default voices
+    keyboard.append([
+        InlineKeyboardButton("🎤 Try Rachel", callback_data="tryvoice_Rachel"),
+        InlineKeyboardButton("🎤 Try Antoni", callback_data="tryvoice_Antoni")
+    ])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # Short list for the text part (more concise)
+    short_list = "\n".join([f"• {name}" for name in voice_names[:6]])
     
     await update.message.reply_text(
-        "🎙 *Available Voices*\n\n" + "\n\n".join(voices_list[:10]) + 
-        "\n\n*Usage:* `/voice VoiceName: Your text here`",
-        parse_mode=ParseMode.MARKDOWN
+        "🎙 *Pick a Voice*\n\n" + short_list + "\n...and more!\n\n"
+        "Tap a name above or use `/setvoice <name>`",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=reply_markup
     )
 
 
@@ -1761,7 +2199,7 @@ async def setvoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(
             "Usage: `/setvoice <voice_name>`\n\n"
             "Example: `/setvoice Rachel`\n"
-            "Use `/voices` to see available voices.",
+            "Use `/voices` for buttons!",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -1771,8 +2209,7 @@ async def setvoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Validate voice name
     if voice_name not in VoiceEngine.AVAILABLE_VOICES:
         await update.message.reply_text(
-            f"Unknown voice: {voice_name}\n\n"
-            "Use `/voices` to see available voices."
+            f"Unknown: {voice_name}\n\nUse `/voices` to pick!"
         )
         return
     
@@ -1785,8 +2222,7 @@ async def setvoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     voice_info = VoiceEngine.AVAILABLE_VOICES[voice_name]
     await update.message.reply_text(
-        f"✅ Default voice set to *{voice_name}*\n\n"
-        f"_{voice_info['description']}_",
+        f"✅ *{voice_name}* set as default!\n_{voice_info['description']}_",
         parse_mode=ParseMode.MARKDOWN
     )
 

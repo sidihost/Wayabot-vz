@@ -66,7 +66,8 @@ from handlers import (
     voice_command, voices_command, setvoice_command, voicestyle_command, speakthis_command,
     # Emotion AI (Hume)
     mood_command, emotions_command, empathy_command, wellbeing_command, analyze_voice_emotion,
-    handle_message, handle_callback, error_handler
+    handle_message, handle_voice_message, handle_audio_message, handle_photo_message,
+    handle_callback, error_handler
 )
 
 
@@ -163,8 +164,11 @@ async def setup_telegram_app() -> Application:
     for command, handler in commands:
         app.add_handler(CommandHandler(command, handler))
     
-    # Message handler for all text messages
+    # Message handlers for all message types
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
+    app.add_handler(MessageHandler(filters.AUDIO, handle_audio_message))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo_message))
     
     # Callback handler for inline keyboards
     app.add_handler(CallbackQueryHandler(handle_callback))
