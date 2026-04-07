@@ -1647,7 +1647,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 voice_name = pref['voice_name']
                 voice_style = pref.get('voice_style', 'default')
                 
-                await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+                await update.message.chat.send_action(ChatAction.RECORD_VOICE)
                 audio_bytes = await voice_engine.text_to_speech(response, voice=voice_name, style=voice_style)
                 
                 if audio_bytes:
@@ -1677,7 +1677,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # PREMIUM: Show processing with loading
     loading = await update.message.reply_text("🎙 *Listening...*")
-    await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+    await update.message.chat.send_action(ChatAction.RECORD_VOICE)
     
     # Download voice
     voice = update.message.voice
@@ -1714,7 +1714,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     response_text = f"Hey {name}! Heard you loud and clear 🔊\n\nWhat would you like me to help with?"
     
     # Send voice reply
-    await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+    await update.message.chat.send_action(ChatAction.RECORD_VOICE)
     
     if voice_engine.is_configured:
         audio_bytes = await voice_engine.text_to_speech(response_text, voice=voice_name, style=voice_style)
@@ -2052,7 +2052,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Generate a short test voice
         test_text = f"Hi! This is {voice_name}. Now you know how I sound!"
         
-        await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+        await update.message.chat.send_action(ChatAction.RECORD_VOICE)
         
         audio_bytes = await voice_engine.text_to_speech(test_text, voice=voice_name)
         
