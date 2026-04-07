@@ -733,3 +733,61 @@ async def play_quick_animation(
         })
     
     return True
+
+
+# =========================================================================
+# CONVENIENCE WRAPPERS (accept bot_token directly)
+# =========================================================================
+
+class CelebrationType(Enum):
+    """Type of celebration to play"""
+    CONFETTI = "confetti"
+    ROCKET = "rocket"
+    CHECKMARK = "checkmark"
+    ALL = "all"
+
+
+async def celebrate_bot_creation(
+    bot_token: str,
+    chat_id: int,
+    bot_name: str,
+    celebration_type: CelebrationType = CelebrationType.ALL
+) -> Optional[int]:
+    """
+    Convenience wrapper to play bot creation celebration.
+    Accepts bot_token directly instead of TelegramAPI instance.
+    
+    Args:
+        bot_token: Bot token string
+        chat_id: Chat ID
+        bot_name: Name of the created bot
+        celebration_type: Type of celebration (default: ALL)
+    
+    Returns:
+        Message ID of the celebration message
+    """
+    api = get_telegram_api(bot_token)
+    return await play_bot_creation_celebration(api, chat_id, bot_name)
+
+
+async def celebrate_milestone(
+    bot_token: str,
+    chat_id: int,
+    milestone: str,
+    description: str = ""
+) -> Optional[int]:
+    """
+    Convenience wrapper to play milestone celebration.
+    Accepts bot_token directly instead of TelegramAPI instance.
+    
+    Args:
+        bot_token: Bot token string
+        chat_id: Chat ID
+        milestone: Milestone name
+        description: Additional description
+    
+    Returns:
+        Message ID of the celebration message
+    """
+    api = get_telegram_api(bot_token)
+    return await play_milestone_celebration(api, chat_id, milestone, description)

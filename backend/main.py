@@ -336,6 +336,7 @@ async def health():
         pass
     
     runtime_bots = bot_runtime.get_all_bots_status() if bot_runtime else []
+    runtime_running = bot_runtime._running if bot_runtime else False
     
     return {
         "status": "healthy" if db_healthy and telegram_app else "degraded",
@@ -343,7 +344,7 @@ async def health():
             "database": "healthy" if db_healthy else "unhealthy",
             "telegram": "connected" if telegram_app else "disconnected",
             "scheduler": "running" if scheduler and scheduler._running else "stopped",
-            "bot_runtime": "running" if bot_runtime._running else "stopped"
+            "bot_runtime": "running" if runtime_running else "stopped"
         },
         "active_bots": len(runtime_bots)
     }

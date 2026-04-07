@@ -25,7 +25,7 @@ from ai_engine import generate_response, get_groq_client, BEST_MODEL
 import database as db
 from agent_engine import initialize_agent_settings
 from bot_runtime import auto_deploy_bot, auto_update_bot
-from animations import play_bot_creation_celebration, CelebrationType
+from animations import celebrate_bot_creation, CelebrationType
 
 
 # =============================================================================
@@ -726,7 +726,7 @@ async def create_bot_with_ai(
         # Play celebration animation (confetti, rocket, checkmark - all of them!)
         chat_id = update.effective_chat.id
         asyncio.create_task(
-            play_bot_creation_celebration(
+            celebrate_bot_creation(
                 bot_token=context.bot.token,
                 chat_id=chat_id,
                 bot_name=config.get('name', 'Your Bot'),
