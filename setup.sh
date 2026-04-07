@@ -76,11 +76,81 @@ fi
 
 if [ ! -f .env ]; then
     echo ""
-    echo -e "${BLUE}Let's configure your bot:${NC}"
+    echo -e "${BLUE}How would you like to configure your bot?${NC}"
     echo ""
+    echo "  1) Import from Vercel (if you have env vars there)"
+    echo "  2) Enter manually"
+    echo ""
+    read -p "Choose option [1/2]: " CONFIG_OPTION
     
-    # Telegram Bot Token
-    echo -e "${YELLOW}1. TELEGRAM BOT TOKEN${NC}"
+    if [ "$CONFIG_OPTION" = "1" ]; then
+        # =============================================================================
+        # OPTION 1: Import from Vercel
+        # =============================================================================
+        echo ""
+        echo -e "${YELLOW}Importing from Vercel...${NC}"
+        
+        # Check if npm is installed
+        if ! command -v npm &> /dev/null; then
+            echo "Installing Node.js..."
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+            apt-get install -y nodejs
+        fi
+        
+        # Install Vercel CLI
+        if ! command -v vercel &> /dev/null; then
+            echo "Installing Vercel CLI..."
+            npm i -g vercel
+        fi
+        
+        echo ""
+        echo -e "${BLUE}You'll need to login to Vercel and link your project.${NC}"
+        echo ""
+        
+        # Login to Vercel
+        vercel login
+        
+        # Link to project
+        echo ""
+        echo "Now link to your Vercel project..."
+        vercel link
+        
+        # Pull env vars
+        echo ""
+        echo "Pulling environment variables..."
+        vercel env pull .env
+        
+        # Add any missing vars
+        if ! grep -q "BOT_DOMAIN" .env 2>/dev/null; then
+            echo "" >> .env
+            echo "# Domain for webhook" >> .env
+            echo "BOT_DOMAIN=waya.qzz.io" >> .env
+        fi
+        
+        # Add database vars if missing
+        if ! grep -q "DATABASE_URL" .env 2>/dev/null; then
+            echo "" >> .env
+            echo "# Database (local Docker PostgreSQL)" >> .env
+            echo "DB_USER=waya" >> .env
+            echo "DB_PASSWORD=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)" >> .env
+            echo "DB_NAME=wayabot" >> .env
+            source .env 2>/dev/null || true
+            echo "DATABASE_URL=postgresql://\${DB_USER}:\${DB_PASSWORD}@postgres:5432/\${DB_NAME}" >> .env
+        fi
+        
+        chmod 600 .env
+        echo -e "${GREEN}Environment imported from Vercel!${NC}"
+        
+    else
+        # =============================================================================
+        # OPTION 2: Manual Configuration
+        # =============================================================================
+        echo ""
+        echo -e "${BLUE}Let's configure your bot manually:${NC}"
+        echo ""
+    
+        # Telegram Bot Token
+        echo -e "${YELLOW}1. TELEGRAM BOT TOKEN${NC}"
     echo "   Get it from @BotFather on Telegram"
     echo "   - Open Telegram and search for @BotFather"
     echo "   - Send /newbot and follow instructions"
@@ -161,7 +231,8 @@ EOF
 
     chmod 600 .env
     echo -e "${GREEN}Environment file created${NC}"
-fi
+    fi  # End of manual config option
+fi  # End of .env check
 
 # Load environment
 source .env

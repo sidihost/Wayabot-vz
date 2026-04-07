@@ -37,7 +37,9 @@ chmod +x setup.sh
 sudo ./setup.sh
 ```
 
-The script will ask for your API keys and set everything up automatically.
+The script gives you two options:
+1. **Import from Vercel** - If you have env vars in Vercel, it will pull them automatically
+2. **Enter manually** - Walk through each API key step by step
 
 ---
 
