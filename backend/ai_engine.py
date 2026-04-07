@@ -10,14 +10,14 @@ from groq import AsyncGroq
 from datetime import datetime
 
 # 🏆 BEST Groq Models
-BEST_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # FASTEST & SMARTEST
-REASONING_MODEL = "deepseek-ai/DeepSeek-R1"
+BEST_MODEL = "groq/llama-4-scout"  # FASTEST & SMARTEST!
+REASONING_MODEL = "groq/deepseek-r1"
 
 # 🎙 Whisper - FASTEST transcription
 WHISPER_MODEL = "whisper-large-v3-turbo"
 
 # 🤖 COMPOUND - Agentic AI with TOOLS!
-COMPOUND_MODEL = "compound-beta"  # Web search + code execution!
+COMPOUND_MODEL = "groq/compound"  # Web search + code execution!
 
 
 async def compound_response(user_message: str, conversation_history: list = None) -> str:
