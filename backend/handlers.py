@@ -327,7 +327,7 @@ XP: {current_xp:,} / {xp_for_next:,}
 Current: {stats.get('streak_days', 0)} days
 Longest: {stats.get('longest_streak', 0)} days
 
-*📈 Statistics:*
+*�� Statistics:*
 💬 Messages: {stats.get('total_messages', 0):,}
 🤖 AI Requests: {stats.get('total_ai_requests', 0):,}
 ⏰ Reminders: {stats.get('total_reminders_created', 0)} ({stats.get('total_reminders_completed', 0)} done)
@@ -1596,7 +1596,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             SELECT enable_empathic_responses FROM user_emotion_preferences
             WHERE user_id = $1
         """, user_id)
-        empathic_mode = pref_row['enable_empathic_responses'] if pref_row else True
+        # Safely access the preference with a default value
+        if pref_row is not None:
+            empathic_mode = pref_row.get('enable_empathic_responses', True) if hasattr(pref_row, 'get') else pref_row['enable_empathic_responses']
+        else:
+            empathic_mode = True
     
     # Analyze emotions if empathic mode is on
     if empathic_mode and emotion_engine.is_configured:
@@ -2432,7 +2436,11 @@ async def empathy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             WHERE user_id = $1
         """, user_id)
         
-        current = row['enable_empathic_responses'] if row else True
+        # Safely access the preference with a default value
+        if row is not None:
+            current = row.get('enable_empathic_responses', True) if hasattr(row, 'get') else row['enable_empathic_responses']
+        else:
+            current = True
         new_value = not current
         
         await conn.execute("""
@@ -2556,7 +2564,16 @@ async def analyze_voice_emotion(update: Update, context: ContextTypes.DEFAULT_TY
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle errors in the bot."""
     import logging
-    logging.error(f"Exception: {context.error}", exc_info=context.error)
+    import traceback
+    
+    # Log the full error details
+    error = context.error
+    error_message = str(error) if error else "Unknown error"
+    error_type = type(error).__name__ if error else "Unknown"
+    
+    logging.error(f"Exception [{error_type}]: {error_message}")
+    if error:
+        logging.error(f"Traceback: {''.join(traceback.format_exception(type(error), error, error.__traceback__))}")
     
     if update and update.effective_message:
         await update.effective_message.reply_text(
