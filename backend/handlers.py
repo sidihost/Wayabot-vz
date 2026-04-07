@@ -176,18 +176,36 @@ import bot_builder
 from voice_engine import voice_engine, voice_preferences, VoiceEngine
 from emotion_engine import emotion_engine, EmotionEngine
 
-# AI Agent Features
-from agent_engine import (
-    auto_react_to_message, 
-    get_agent_settings, 
-    initialize_agent_settings,
-    track_engagement,
-    AgentSettings
-)
-from moderation import moderate_message, ModerationLevel
-from suggestions import generate_suggestions, send_message_with_suggestions
-from animations import play_bot_creation_celebration, play_milestone_celebration
-from telegram_api import get_telegram_api
+# AI Agent Features (optional - gracefully degrade if not available)
+try:
+    from agent_engine import (
+        auto_react_to_message, 
+        get_agent_settings, 
+        initialize_agent_settings,
+        track_engagement,
+        AgentSettings
+    )
+    from moderation import moderate_message, ModerationLevel
+    from suggestions import generate_suggestions, send_message_with_suggestions
+    from animations import play_bot_creation_celebration, play_milestone_celebration
+    from telegram_api import get_telegram_api
+    AGENT_FEATURES_AVAILABLE = True
+except ImportError as e:
+    print(f"Agent features not available: {e}")
+    AGENT_FEATURES_AVAILABLE = False
+    # Define fallback classes/functions
+    class AgentSettings:
+        auto_react_enabled = False
+        auto_moderate_enabled = False
+        auto_suggest_enabled = False
+        auto_schedule_enabled = False
+        reaction_style = "minimal"
+        moderation_level = "low"
+        suggestion_count = 0
+    async def get_agent_settings(bot_id): return AgentSettings()
+    async def initialize_agent_settings(bot_id): pass
+    async def track_engagement(bot_id, chat_id): pass
+    async def auto_react_to_message(**kwargs): pass
 
 
 # Minimum interval between message edits to avoid Telegram rate limits
@@ -259,10 +277,20 @@ async def stream_response_to_message(
         return sent_msg, full_response
         
     except Exception as e:
-        # If streaming fails, return what we have
+        # If streaming fails, clean up and return what we have
         if full_response:
             try:
                 await sent_msg.edit_text(full_response)
+            except:
+                # If edit fails too, delete the placeholder and send a new message
+                try:
+                    await sent_msg.delete()
+                except:
+                    pass
+        else:
+            # No response at all - delete the "Thinking..." placeholder
+            try:
+                await sent_msg.delete()
             except:
                 pass
         return sent_msg, full_response or str(e)
@@ -2568,13 +2596,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await db.increment_bot_usage(bot_id)
             system_prompt = bot.get('system_prompt', WAYA_SYSTEM_PROMPT)
             
-            # Get AI agent settings for this bot
-            agent_settings = await get_agent_settings(bot_id)
+            # Get AI agent settings for this bot (with fallback if table doesn't exist)
+            agent_settings = None
+            try:
+                agent_settings = await get_agent_settings(bot_id)
+            except Exception:
+                agent_settings = AgentSettings()  # Use defaults
             
-            # Auto-react to user message (if enabled)
-            if agent_settings.auto_react_enabled:
+            # Auto-react to user message (if enabled and settings available)
+            if agent_settings and agent_settings.auto_react_enabled:
                 try:
-                    # We need the main bot's token for reactions
                     bot_token = context.bot.token
                     asyncio.create_task(auto_react_to_message(
                         bot_token=bot_token,
@@ -2584,11 +2615,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         bot_id=bot_id,
                         reaction_style=agent_settings.reaction_style
                     ))
-                except Exception as e:
+                except Exception:
                     pass  # Don't fail on reaction errors
             
             # Check moderation (if enabled for groups)
-            if agent_settings.auto_moderate_enabled and update.effective_chat.type in ['group', 'supergroup']:
+            if agent_settings and agent_settings.auto_moderate_enabled and update.effective_chat.type in ['group', 'supergroup']:
                 try:
                     moderation_result = await moderate_message(
                         bot_token=context.bot.token,
@@ -2600,9 +2631,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         moderation_level=ModerationLevel(agent_settings.moderation_level)
                     )
                     if moderation_result.is_violation:
-                        # Message was handled by moderation, stop processing
                         return
-                except Exception as e:
+                except Exception:
                     pass  # Don't fail on moderation errors
             
             history = await db.get_conversation_history(user_id, limit=10)
@@ -2621,37 +2651,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await db.increment_stat(user_id, "total_ai_requests")
             await db.increment_stat(user_id, "total_bot_interactions")
             
-            # Track engagement for optimal scheduling
-            asyncio.create_task(track_engagement(bot_id, chat_id))
-            
-            # Generate smart suggestions (if enabled)
-            if agent_settings.auto_suggest_enabled:
+            # Track engagement (non-blocking, ignore errors)
+            if agent_settings:
                 try:
-                    suggestion_result = await generate_suggestions(
-                        message_text=message_text,
-                        conversation_context=[{"role": "assistant", "content": response}],
-                        count=agent_settings.suggestion_count,
-                        use_ai=True
-                    )
-                    
-                    if suggestion_result.suggestions:
-                        # Build suggestion buttons
-                        keyboard = []
-                        for i, sug in enumerate(suggestion_result.suggestions[:3]):
-                            keyboard.append([InlineKeyboardButton(
-                                sug.text[:32], 
-                                callback_data=f"sug_{bot_id}_{i}"
-                            )])
-                        
-                        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-                        await safe_reply_text(
-                            update.message, response, 
-                            parse_mode=ParseMode.MARKDOWN,
-                            reply_markup=reply_markup
-                        )
-                        return
-                except Exception as e:
-                    pass  # Fall back to normal response
+                    asyncio.create_task(track_engagement(bot_id, chat_id))
+                except Exception:
+                    pass
+            
+            # Generate smart suggestions (if enabled) - DISABLED for now to avoid issues
+            # Suggestions will be enabled once the database tables are created
+            # if agent_settings and agent_settings.auto_suggest_enabled:
+            #     try:
+            #         suggestion_result = await generate_suggestions(...)
+            #     except Exception:
+            #         pass
             
             # Use safe_reply_text for potentially long AI responses
             await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)

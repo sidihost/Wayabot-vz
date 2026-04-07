@@ -23,9 +23,22 @@ from telegram.constants import ParseMode, ChatAction
 
 from ai_engine import generate_response, get_groq_client, BEST_MODEL
 import database as db
-from agent_engine import initialize_agent_settings
-from bot_runtime import auto_deploy_bot, auto_update_bot
-from animations import celebrate_bot_creation, CelebrationType
+
+# Optional agent features (gracefully degrade if not available)
+try:
+    from agent_engine import initialize_agent_settings
+    from bot_runtime import auto_deploy_bot, auto_update_bot
+    from animations import celebrate_bot_creation, CelebrationType
+    AGENT_FEATURES_AVAILABLE = True
+except ImportError as e:
+    print(f"Agent features not available in bot_builder: {e}")
+    AGENT_FEATURES_AVAILABLE = False
+    async def initialize_agent_settings(bot_id): pass
+    async def auto_deploy_bot(bot_id): return {"success": False}
+    async def auto_update_bot(bot_id): return {"success": False}
+    async def celebrate_bot_creation(**kwargs): pass
+    class CelebrationType:
+        ALL = "all"
 
 
 # =============================================================================
