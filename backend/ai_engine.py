@@ -500,10 +500,11 @@ Respond with JSON:
     "title": "task title",
     "description": "task description or null",
     "due_date": "ISO format datetime if mentioned, or null",
-    "priority": "high, medium, or low",
+    "priority": "low, normal, high, or urgent",
     "confidence": 0.0 to 1.0
 }}
 
+Priority must be one of: low, normal, high, urgent. Default to "normal" if not specified.
 Only respond with valid JSON."""
 
     try:

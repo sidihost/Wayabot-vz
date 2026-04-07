@@ -328,8 +328,15 @@ async def webhook(request: Request):
         return {"status": "ok"}
     
     except Exception as e:
-        print(f"[Webhook Error] {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_type = type(e).__name__
+        error_message = str(e)
+        tb = traceback.format_exc()
+        print(f"[Webhook Error] [{error_type}] {error_message}")
+        print(f"[Webhook Traceback] {tb}")
+        # Return 200 OK to Telegram to prevent retries for application errors
+        # Only return non-200 for actual server errors that should be retried
+        return {"status": "error", "error": f"{error_type}: {error_message}"}
 
 
 @app.post("/set-webhook")

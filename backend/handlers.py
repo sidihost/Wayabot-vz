@@ -264,7 +264,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 💡 *Pro Tip:* You can just chat naturally - I understand context!
 """
     
-    await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+    # Use effective_message to support both direct commands and callback queries
+    message = update.effective_message
+    if message:
+        await message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -297,8 +300,12 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     stats = await db.get_user_stats(user_id)
     user = await db.get_user(user_id)
     
+    # Use effective_message to support both direct commands and callback queries
+    message = update.effective_message
+    
     if not stats:
-        await update.message.reply_text("Could not load your profile. Please try again.")
+        if message:
+            await message.reply_text("Could not load your profile. Please try again.")
         return
     
     # Calculate level progress
@@ -327,7 +334,7 @@ XP: {current_xp:,} / {xp_for_next:,}
 Current: {stats.get('streak_days', 0)} days
 Longest: {stats.get('longest_streak', 0)} days
 
-*📈 Statistics:*
+*�� Statistics:*
 💬 Messages: {stats.get('total_messages', 0):,}
 🤖 AI Requests: {stats.get('total_ai_requests', 0):,}
 ⏰ Reminders: {stats.get('total_reminders_created', 0)} ({stats.get('total_reminders_completed', 0)} done)
@@ -347,16 +354,20 @@ Keep chatting to earn more XP! 🚀
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        profile_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=reply_markup
-    )
+    if message:
+        await message.reply_text(
+            profile_text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
 
 
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /leaderboard command."""
     await track_command(update.effective_user.id, "leaderboard")
+    
+    # Use effective_message to support both direct commands and callback queries
+    message = update.effective_message
     
     async with db.get_connection() as conn:
         rows = await conn.fetch("""
@@ -368,7 +379,8 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         """)
     
     if not rows:
-        await update.message.reply_text("No users on the leaderboard yet!")
+        if message:
+            await message.reply_text("No users on the leaderboard yet!")
         return
     
     text = "🏆 *Waya Leaderboard*\n\n"
@@ -380,7 +392,8 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         text += f"{medal} *{name}*\n"
         text += f"    Level {row['level']} • {row['xp_points']:,} XP • 🔥{row['streak_days']}\n\n"
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    if message:
+        await message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
 # =====================================================
@@ -689,6 +702,13 @@ async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     title = parsed.get("title", task_text)
     description = parsed.get("description")
     priority = parsed.get("priority", "normal")
+    
+    # Validate and map priority to allowed values
+    VALID_PRIORITIES = {"low", "normal", "high", "urgent"}
+    PRIORITY_MAP = {"medium": "normal", "critical": "urgent", "important": "high"}
+    if priority not in VALID_PRIORITIES:
+        priority = PRIORITY_MAP.get(priority.lower() if priority else "normal", "normal")
+    
     due_date = None
     
     if parsed.get("due_date"):
@@ -1596,7 +1616,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             SELECT enable_empathic_responses FROM user_emotion_preferences
             WHERE user_id = $1
         """, user_id)
-        empathic_mode = pref_row['enable_empathic_responses'] if pref_row else True
+        # Safely access the preference with a default value
+        if pref_row is not None:
+            empathic_mode = pref_row.get('enable_empathic_responses', True) if hasattr(pref_row, 'get') else pref_row['enable_empathic_responses']
+        else:
+            empathic_mode = True
     
     # Analyze emotions if empathic mode is on
     if empathic_mode and emotion_engine.is_configured:
@@ -1643,7 +1667,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 voice_name = pref['voice_name']
                 voice_style = pref.get('voice_style', 'default')
                 
-                await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+                await update.message.chat.send_action(ChatAction.RECORD_VOICE)
                 audio_bytes = await voice_engine.text_to_speech(response, voice=voice_name, style=voice_style)
                 
                 if audio_bytes:
@@ -1673,7 +1697,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # PREMIUM: Show processing with loading
     loading = await update.message.reply_text("🎙 *Listening...*")
-    await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+    await update.message.chat.send_action(ChatAction.RECORD_VOICE)
     
     # Download voice
     voice = update.message.voice
@@ -1710,7 +1734,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     response_text = f"Hey {name}! Heard you loud and clear 🔊\n\nWhat would you like me to help with?"
     
     # Send voice reply
-    await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+    await update.message.chat.send_action(ChatAction.RECORD_VOICE)
     
     if voice_engine.is_configured:
         audio_bytes = await voice_engine.text_to_speech(response_text, voice=voice_name, style=voice_style)
@@ -2048,7 +2072,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Generate a short test voice
         test_text = f"Hi! This is {voice_name}. Now you know how I sound!"
         
-        await update.message.chat.send_action(ChatAction.RECORD_AUDIO)
+        await update.message.chat.send_action(ChatAction.RECORD_VOICE)
         
         audio_bytes = await voice_engine.text_to_speech(test_text, voice=voice_name)
         
@@ -2432,7 +2456,11 @@ async def empathy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             WHERE user_id = $1
         """, user_id)
         
-        current = row['enable_empathic_responses'] if row else True
+        # Safely access the preference with a default value
+        if row is not None:
+            current = row.get('enable_empathic_responses', True) if hasattr(row, 'get') else row['enable_empathic_responses']
+        else:
+            current = True
         new_value = not current
         
         await conn.execute("""
@@ -2556,7 +2584,16 @@ async def analyze_voice_emotion(update: Update, context: ContextTypes.DEFAULT_TY
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle errors in the bot."""
     import logging
-    logging.error(f"Exception: {context.error}", exc_info=context.error)
+    import traceback
+    
+    # Log the full error details
+    error = context.error
+    error_message = str(error) if error else "Unknown error"
+    error_type = type(error).__name__ if error else "Unknown"
+    
+    logging.error(f"Exception [{error_type}]: {error_message}")
+    if error:
+        logging.error(f"Traceback: {''.join(traceback.format_exception(type(error), error, error.__traceback__))}")
     
     if update and update.effective_message:
         await update.effective_message.reply_text(
