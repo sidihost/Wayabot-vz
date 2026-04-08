@@ -126,8 +126,17 @@ def get_groq_client() -> AsyncGroq:
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY environment variable is not set")
+        # Validate API key format (should start with gsk_)
+        if not api_key.startswith("gsk_"):
+            print(f"Warning: GROQ_API_KEY may be invalid - expected format starting with 'gsk_'")
         groq_client = AsyncGroq(api_key=api_key)
     return groq_client
+
+
+def reset_groq_client():
+    """Reset the Groq client (useful if API key changes)."""
+    global groq_client
+    groq_client = None
 
 
 # Default system prompt for Waya
@@ -292,7 +301,11 @@ Respond in a {response_style} manner. Adapt your tone and language accordingly:
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"I apologize, but I encountered an error: {str(e)}. Please try again."
+        error_str = str(e).lower()
+        # Check for API key/access issues - don't expose raw error to users
+        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
+            return "I'm having trouble connecting right now. Please try again in a moment."
+        return "I apologize, but I encountered an issue. Please try again."
 
 
 async def generate_response_streaming(
@@ -343,7 +356,11 @@ async def generate_response_streaming(
                 yield chunk.choices[0].delta.content
                 
     except Exception as e:
-        yield f"I apologize, but I encountered an error: {str(e)}. Please try again."
+        error_str = str(e).lower()
+        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
+            yield "I'm having trouble connecting right now. Please try again in a moment."
+        else:
+            yield "I apologize, but I encountered an issue. Please try again."
 
 
 async def generate_empathic_response(
@@ -449,9 +466,37 @@ Respond ONLY with valid JSON."""
                 config = json.loads(json_match.group())
                 config['user_original_request'] = user_request
                 return config
-            return {"error": "Could not create bot", "raw": result}
+            # Return a working fallback instead of error
+            return _create_fallback_bot_config(user_request)
     except Exception as e:
-        return {"error": str(e)}
+        error_str = str(e).lower()
+        # Check for API key/access issues
+        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
+            # Return a working fallback bot config instead of failing
+            return _create_fallback_bot_config(user_request)
+        return {"error": "AI service temporarily unavailable. Please try again in a moment."}
+
+
+def _create_fallback_bot_config(user_request: str) -> Dict[str, Any]:
+    """Create a fallback bot configuration when AI generation fails."""
+    return {
+        "bot_name": "Custom Bot",
+        "bot_description": f"A bot based on: {user_request[:80]}",
+        "bot_type": "general",
+        "system_prompt": f"You are a helpful assistant. {user_request[:150]}. Be friendly and concise.",
+        "greeting_message": "Hey! I'm your assistant. How can I help you?",
+        "features": ["AI Chat", "Commands", "Auto-reply"],
+        "commands": [
+            {"command": "/help", "description": "Get help"},
+            {"command": "/start", "description": "Start the bot"}
+        ],
+        "response_templates": {
+            "greeting": "Hey! How can I help?",
+            "help": "Send me a message and I'll assist you!",
+            "fallback": "I'm here to help. What do you need?"
+        },
+        "user_original_request": user_request
+    }
 
 
 async def analyze_message_intent(message: str) -> Dict[str, Any]:
