@@ -10,14 +10,22 @@ from groq import AsyncGroq
 from datetime import datetime
 
 # 🏆 BEST Groq Models - Use actual model names (not prefixed)
-BEST_MODEL = "llama-3.3-70b-versatile"  # FASTEST & SMARTEST!
-REASONING_MODEL = "llama-3.3-70b-versatile"  # Use same model for reasoning
+BEST_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")  # Configurable via env
+FALLBACK_MODEL = "llama-3.1-8b-instant"  # Faster, cheaper fallback
+REASONING_MODEL = BEST_MODEL  # Use same model for reasoning
 
 # 🎙 Whisper - FASTEST transcription
 WHISPER_MODEL = "whisper-large-v3-turbo"
 
 # 🤖 Fallback model for compound tasks
-COMPOUND_MODEL = "llama-3.3-70b-versatile"  # Use main model as fallback
+COMPOUND_MODEL = BEST_MODEL  # Use main model as fallback
+
+# List of models to try in order if one fails
+MODEL_FALLBACK_CHAIN = [
+    BEST_MODEL,
+    "llama-3.1-8b-instant",  # Fast fallback
+    "meta-llama/llama-4-scout-17b-16e-instruct",  # Llama 4 preview
+]
 
 
 async def compound_response(user_message: str, conversation_history: list = None) -> str:
@@ -292,20 +300,33 @@ Respond in a {response_style} manner. Adapt your tone and language accordingly:
     # Add current message
     messages.append({"role": "user", "content": user_message})
     
-    try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        error_str = str(e).lower()
-        # Check for API key/access issues - don't expose raw error to users
-        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
-            return "I'm having trouble connecting right now. Please try again in a moment."
-        return "I apologize, but I encountered an issue. Please try again."
+    # Try each model in the fallback chain
+    last_error = None
+    for model in MODEL_FALLBACK_CHAIN:
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            # If it's an auth error, don't try other models - the key is invalid
+            if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "invalid" in error_str:
+                print(f"[AI] Auth error with Groq API: {e}")
+                break
+            # For other errors (rate limit, model not found), try next model
+            print(f"[AI] Model {model} failed: {e}, trying next...")
+            continue
+    
+    # All models failed
+    error_str = str(last_error).lower() if last_error else ""
+    if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
+        return "I'm having trouble connecting right now. Please try again in a moment."
+    return "I apologize, but I encountered an issue. Please try again."
 
 
 async def generate_response_streaming(
