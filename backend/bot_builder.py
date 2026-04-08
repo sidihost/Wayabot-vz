@@ -643,16 +643,14 @@ Make it creative, useful, and production-ready. Return ONLY valid JSON."""
 
     try:
         response = await asyncio.wait_for(
-            asyncio.to_thread(
-                lambda: client.chat.completions.create(
-                    model=BEST_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You are a Telegram bot architect. Create detailed, production-ready bot configurations. Return only valid JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=1500
-                )
+            client.chat.completions.create(
+                model=BEST_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a Telegram bot architect. Create detailed, production-ready bot configurations. Return only valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1500
             ),
             timeout=30.0
         )
@@ -788,16 +786,14 @@ Return ONLY valid JSON with the changes."""
 
     try:
         response = await asyncio.wait_for(
-            asyncio.to_thread(
-                lambda: client.chat.completions.create(
-                    model=BEST_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You edit Telegram bot configurations. Return only the changed fields as JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.5,
-                    max_tokens=800
-                )
+            client.chat.completions.create(
+                model=BEST_MODEL,
+                messages=[
+                    {"role": "system", "content": "You edit Telegram bot configurations. Return only the changed fields as JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.5,
+                max_tokens=800
             ),
             timeout=20.0
         )
