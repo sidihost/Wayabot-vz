@@ -669,55 +669,55 @@ Make it creative, useful, and production-ready. Return ONLY valid JSON."""
         
         return config
         
-  except json.JSONDecodeError as e:
-    return {
-      "bot_name": "Custom Bot",
-      "bot_description": description[:100],
-      "greeting_message": f"Hello! I'm your assistant. How can I help?",
-      "system_prompt": f"You are a helpful assistant that {description[:200]}",
-      "features": ["ai_chat", "commands", "auto_reply"],
-      "commands": [
-        {"command": "start", "description": "Start the bot"},
-        {"command": "help", "description": "Get help"}
-      ],
-      "tone": "friendly",
-      "category": "productivity"
-    }
-  except asyncio.TimeoutError:
-    # Return a working fallback instead of error
-    return {
-      "bot_name": "Custom Bot",
-      "bot_description": description[:100],
-      "greeting_message": f"Hello! I'm your assistant. How can I help?",
-      "system_prompt": f"You are a helpful assistant that {description[:200]}",
-      "features": ["ai_chat", "commands", "auto_reply"],
-      "commands": [
-        {"command": "start", "description": "Start the bot"},
-        {"command": "help", "description": "Get help"}
-      ],
-      "tone": "friendly",
-      "category": "productivity"
-    }
-  except Exception as e:
-    error_str = str(e).lower()
-    # Check for API key issues (403, 401, unauthorized, etc.)
-    if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str or "invalid" in error_str:
-      # Return a working fallback bot instead of failing
-      return {
-        "bot_name": "Custom Bot",
-        "bot_description": description[:100],
-        "greeting_message": f"Hello! I'm your assistant. How can I help?",
-        "system_prompt": f"You are a helpful assistant that {description[:200]}",
-        "features": ["ai_chat", "commands", "auto_reply"],
-        "commands": [
-          {"command": "start", "description": "Start the bot"},
-          {"command": "help", "description": "Get help"}
-        ],
-        "tone": "friendly",
-        "category": "productivity"
-      }
-    # For other errors, return a user-friendly message
-    return {"error": "AI service temporarily unavailable. Please try again in a moment."}
+    except json.JSONDecodeError as e:
+        return {
+            "bot_name": "Custom Bot",
+            "bot_description": description[:100],
+            "greeting_message": f"Hello! I'm your assistant. How can I help?",
+            "system_prompt": f"You are a helpful assistant that {description[:200]}",
+            "features": ["ai_chat", "commands", "auto_reply"],
+            "commands": [
+                {"command": "start", "description": "Start the bot"},
+                {"command": "help", "description": "Get help"}
+            ],
+            "tone": "friendly",
+            "category": "productivity"
+        }
+    except asyncio.TimeoutError:
+        # Return a working fallback instead of error
+        return {
+            "bot_name": "Custom Bot",
+            "bot_description": description[:100],
+            "greeting_message": f"Hello! I'm your assistant. How can I help?",
+            "system_prompt": f"You are a helpful assistant that {description[:200]}",
+            "features": ["ai_chat", "commands", "auto_reply"],
+            "commands": [
+                {"command": "start", "description": "Start the bot"},
+                {"command": "help", "description": "Get help"}
+            ],
+            "tone": "friendly",
+            "category": "productivity"
+        }
+    except Exception as e:
+        error_str = str(e).lower()
+        # Check for API key issues (403, 401, unauthorized, etc.)
+        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str or "invalid" in error_str:
+            # Return a working fallback bot instead of failing
+            return {
+                "bot_name": "Custom Bot",
+                "bot_description": description[:100],
+                "greeting_message": f"Hello! I'm your assistant. How can I help?",
+                "system_prompt": f"You are a helpful assistant that {description[:200]}",
+                "features": ["ai_chat", "commands", "auto_reply"],
+                "commands": [
+                    {"command": "start", "description": "Start the bot"},
+                    {"command": "help", "description": "Get help"}
+                ],
+                "tone": "friendly",
+                "category": "productivity"
+            }
+        # For other errors, return a user-friendly message
+        return {"error": "AI service temporarily unavailable. Please try again in a moment."}
 
 
 async def create_bot_with_ai(
