@@ -348,14 +348,33 @@ async def health():
     except:
         pass
     
+    # Check Groq AI status
+    ai_healthy = False
+    ai_error = None
+    try:
+        from ai_engine import get_groq_client, BEST_MODEL
+        client = get_groq_client()
+        # Quick test with minimal tokens
+        response = await client.chat.completions.create(
+            model=BEST_MODEL,
+            messages=[{"role": "user", "content": "Hi"}],
+            max_tokens=5
+        )
+        ai_healthy = True
+    except Exception as e:
+        ai_error = str(e)
+    
     runtime_bots = bot_runtime.get_all_bots_status() if bot_runtime else []
     runtime_running = bot_runtime._running if bot_runtime else False
     
+    all_healthy = db_healthy and telegram_app and ai_healthy
+    
     return {
-        "status": "healthy" if db_healthy and telegram_app else "degraded",
+        "status": "healthy" if all_healthy else "degraded",
         "components": {
             "database": "healthy" if db_healthy else "unhealthy",
             "telegram": "connected" if telegram_app else "disconnected",
+            "ai_groq": "healthy" if ai_healthy else f"unhealthy: {ai_error}",
             "scheduler": "running" if scheduler and scheduler._running else "stopped",
             "bot_runtime": "running" if runtime_running else "stopped"
         },

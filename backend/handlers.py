@@ -433,7 +433,7 @@ Quick actions below or just tell me what you need!
          InlineKeyboardButton("📋 Add Task", callback_data="quick_task")],
         [InlineKeyboardButton("🤖 Build a Bot", callback_data="build_bot"),
          InlineKeyboardButton("📄 Create Note", callback_data="quick_note")],
-        [InlineKeyboardButton("💬 Chat with AI", callback_data="start_chat"),
+        [InlineKeyboardButton("�� Chat with AI", callback_data="start_chat"),
          InlineKeyboardButton("📊 My Profile", callback_data="show_profile")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -4264,8 +4264,19 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if error:
         logging.error(f"Traceback: {''.join(traceback.format_exception(type(error), error, error.__traceback__))}")
     
+    # Determine user-friendly error message
+    error_lower = error_message.lower()
+    if "403" in error_lower or "401" in error_lower or "access denied" in error_lower or "unauthorized" in error_lower:
+        user_message = "I'm having trouble connecting to the AI service. Please try again in a moment."
+    elif "timeout" in error_lower or "timed out" in error_lower:
+        user_message = "The request took too long. Please try again."
+    elif "rate limit" in error_lower or "too many requests" in error_lower:
+        user_message = "Too many requests. Please wait a moment and try again."
+    else:
+        user_message = "Something went wrong. Please try again.\n\nIf the problem persists, use `/feedback` to report it."
+    
     if update and update.effective_message:
-        await update.effective_message.reply_text(
-            "❌ Something went wrong. Please try again.\n\n"
-            "If the problem persists, use `/feedback` to report it."
-        )
+        try:
+            await update.effective_message.reply_text(f"❌ {user_message}")
+        except Exception:
+            pass  # Ignore errors when sending error message
