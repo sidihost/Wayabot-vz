@@ -53,16 +53,15 @@ from telegram.ext import (
 import database as db
 from scheduler import WayaScheduler
 
-# Optional bot runtime (gracefully degrade if not available)
-try:
-    from bot_runtime import start_bot_runtime, stop_bot_runtime, bot_runtime
-    BOT_RUNTIME_AVAILABLE = True
-except ImportError as e:
-    print(f"Bot runtime not available: {e}")
-    BOT_RUNTIME_AVAILABLE = False
-    bot_runtime = None
-    async def start_bot_runtime(): pass
-    async def stop_bot_runtime(): pass
+# Bot runtime - DISABLED until properly tested
+BOT_RUNTIME_AVAILABLE = False
+bot_runtime = None
+
+async def start_bot_runtime(): 
+    pass
+    
+async def stop_bot_runtime(): 
+    pass
 from handlers import (
     start_command, help_command, menu_command,
     remind_command, reminders_command, del_reminder_command, snooze_reminder_command,

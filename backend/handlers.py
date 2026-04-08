@@ -176,36 +176,31 @@ import bot_builder
 from voice_engine import voice_engine, voice_preferences, VoiceEngine
 from emotion_engine import emotion_engine, EmotionEngine
 
-# AI Agent Features (optional - gracefully degrade if not available)
-try:
-    from agent_engine import (
-        auto_react_to_message, 
-        get_agent_settings, 
-        initialize_agent_settings,
-        track_engagement,
-        AgentSettings
-    )
-    from moderation import moderate_message, ModerationLevel
-    from suggestions import generate_suggestions, send_message_with_suggestions
-    from animations import play_bot_creation_celebration, play_milestone_celebration
-    from telegram_api import get_telegram_api
-    AGENT_FEATURES_AVAILABLE = True
-except ImportError as e:
-    print(f"Agent features not available: {e}")
-    AGENT_FEATURES_AVAILABLE = False
-    # Define fallback classes/functions
-    class AgentSettings:
-        auto_react_enabled = False
-        auto_moderate_enabled = False
-        auto_suggest_enabled = False
-        auto_schedule_enabled = False
-        reaction_style = "minimal"
-        moderation_level = "low"
-        suggestion_count = 0
-    async def get_agent_settings(bot_id): return AgentSettings()
-    async def initialize_agent_settings(bot_id): pass
-    async def track_engagement(bot_id, chat_id): pass
-    async def auto_react_to_message(**kwargs): pass
+# AI Agent Features - DISABLED until properly tested
+# These features caused errors and are being reworked
+AGENT_FEATURES_AVAILABLE = False
+
+class AgentSettings:
+    """Stub class - agent features disabled"""
+    auto_react_enabled = False
+    auto_moderate_enabled = False
+    auto_suggest_enabled = False
+    auto_schedule_enabled = False
+    reaction_style = "minimal"
+    moderation_level = "low"
+    suggestion_count = 0
+
+async def get_agent_settings(bot_id): 
+    return AgentSettings()
+    
+async def initialize_agent_settings(bot_id): 
+    pass
+    
+async def track_engagement(bot_id, chat_id): 
+    pass
+    
+async def auto_react_to_message(**kwargs): 
+    pass
 
 
 # Minimum interval between message edits to avoid Telegram rate limits
@@ -1162,9 +1157,6 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Make it active!
     await db.set_active_bot(user_id, bot_id)
     await db.add_xp(user_id, 30)
-    
-    # Initialize AI agent settings for the new bot
-    await initialize_agent_settings(bot_id)
     
     # Get bot username for shareable link
     try:
@@ -2589,51 +2581,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if session and session.get('active_bot_id'):
         bot = await db.get_bot(session['active_bot_id'])
         if bot:
-            bot_id = bot['id']
-            chat_id = update.effective_chat.id
-            message_id = update.message.message_id
-            
-            await db.increment_bot_usage(bot_id)
+            await db.increment_bot_usage(bot['id'])
             system_prompt = bot.get('system_prompt', WAYA_SYSTEM_PROMPT)
-            
-            # Get AI agent settings for this bot (with fallback if table doesn't exist)
-            agent_settings = None
-            try:
-                agent_settings = await get_agent_settings(bot_id)
-            except Exception:
-                agent_settings = AgentSettings()  # Use defaults
-            
-            # Auto-react to user message (if enabled and settings available)
-            if agent_settings and agent_settings.auto_react_enabled:
-                try:
-                    bot_token = context.bot.token
-                    asyncio.create_task(auto_react_to_message(
-                        bot_token=bot_token,
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        message_text=message_text,
-                        bot_id=bot_id,
-                        reaction_style=agent_settings.reaction_style
-                    ))
-                except Exception:
-                    pass  # Don't fail on reaction errors
-            
-            # Check moderation (if enabled for groups)
-            if agent_settings and agent_settings.auto_moderate_enabled and update.effective_chat.type in ['group', 'supergroup']:
-                try:
-                    moderation_result = await moderate_message(
-                        bot_token=context.bot.token,
-                        bot_id=bot_id,
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        user_id=user_id,
-                        message_text=message_text,
-                        moderation_level=ModerationLevel(agent_settings.moderation_level)
-                    )
-                    if moderation_result.is_violation:
-                        return
-                except Exception:
-                    pass  # Don't fail on moderation errors
             
             history = await db.get_conversation_history(user_id, limit=10)
             await db.add_conversation(user_id, "user", message_text)
@@ -2651,22 +2600,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await db.increment_stat(user_id, "total_ai_requests")
             await db.increment_stat(user_id, "total_bot_interactions")
             
-            # Track engagement (non-blocking, ignore errors)
-            if agent_settings:
-                try:
-                    asyncio.create_task(track_engagement(bot_id, chat_id))
-                except Exception:
-                    pass
-            
-            # Generate smart suggestions (if enabled) - DISABLED for now to avoid issues
-            # Suggestions will be enabled once the database tables are created
-            # if agent_settings and agent_settings.auto_suggest_enabled:
-            #     try:
-            #         suggestion_result = await generate_suggestions(...)
-            #     except Exception:
-            #         pass
-            
-            # Use safe_reply_text for potentially long AI responses
             await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
             return
     
