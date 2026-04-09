@@ -806,6 +806,172 @@ async def _init_schema():
                 UNIQUE(bot_id, chat_id, user_id, warning_type)
             );
             CREATE INDEX IF NOT EXISTS idx_user_warnings_lookup ON user_warnings(bot_id, chat_id, user_id);
+            
+            -- =====================================================
+            -- INTELLIGENCE CORE v2.0
+            -- Memory, Learning, Cognition, Tools, Proactive
+            -- =====================================================
+            
+            -- Long-term user memories
+            CREATE TABLE IF NOT EXISTS user_memories (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                memory_type VARCHAR(50) NOT NULL CHECK (memory_type IN ('fact', 'preference', 'event', 'relationship', 'goal', 'context')),
+                content TEXT NOT NULL,
+                importance DECIMAL(3,2) DEFAULT 0.5,
+                access_count INT DEFAULT 0,
+                last_accessed_at TIMESTAMPTZ,
+                decay_rate DECIMAL(5,4) DEFAULT 0.01,
+                embedding JSONB,
+                source_message TEXT,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_memories_user ON user_memories(user_id);
+            CREATE INDEX IF NOT EXISTS idx_memories_type ON user_memories(user_id, memory_type);
+            CREATE INDEX IF NOT EXISTS idx_memories_importance ON user_memories(user_id, importance DESC);
+            CREATE INDEX IF NOT EXISTS idx_memories_active ON user_memories(user_id) WHERE is_active = TRUE;
+            
+            -- User preferences learned over time
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                category VARCHAR(100) NOT NULL,
+                preference_key VARCHAR(255) NOT NULL,
+                preference_value TEXT NOT NULL,
+                confidence DECIMAL(3,2) DEFAULT 0.5,
+                evidence_count INT DEFAULT 1,
+                last_confirmed_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(user_id, category, preference_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_prefs_user ON user_preferences(user_id);
+            CREATE INDEX IF NOT EXISTS idx_prefs_category ON user_preferences(user_id, category);
+            
+            -- Communication style profiles
+            CREATE TABLE IF NOT EXISTS user_communication_styles (
+                user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                formality_level DECIMAL(3,2) DEFAULT 0.5,
+                verbosity_level DECIMAL(3,2) DEFAULT 0.5,
+                emoji_usage DECIMAL(3,2) DEFAULT 0.5,
+                humor_level DECIMAL(3,2) DEFAULT 0.5,
+                technical_level DECIMAL(3,2) DEFAULT 0.5,
+                preferred_language VARCHAR(10) DEFAULT 'en',
+                active_hours JSONB DEFAULT '[]'::jsonb,
+                topic_interests JSONB DEFAULT '{}'::jsonb,
+                sample_count INT DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            
+            -- Detected behavioral patterns
+            CREATE TABLE IF NOT EXISTS user_patterns (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                pattern_type VARCHAR(100) NOT NULL,
+                pattern_value JSONB NOT NULL,
+                occurrence_count INT DEFAULT 1,
+                confidence DECIMAL(3,2) DEFAULT 0.5,
+                first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+                is_active BOOLEAN DEFAULT TRUE,
+                UNIQUE(user_id, pattern_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_patterns_user ON user_patterns(user_id);
+            
+            -- User feedback on AI responses
+            CREATE TABLE IF NOT EXISTS ai_feedback (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                conversation_id BIGINT REFERENCES conversations(id) ON DELETE SET NULL,
+                feedback_type VARCHAR(50) NOT NULL CHECK (feedback_type IN ('positive', 'negative', 'correction', 'explicit')),
+                feedback_value TEXT,
+                original_response TEXT,
+                corrected_response TEXT,
+                context JSONB,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_feedback_user ON ai_feedback(user_id, created_at DESC);
+            
+            -- Reasoning traces for debugging/learning
+            CREATE TABLE IF NOT EXISTS reasoning_traces (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                session_id VARCHAR(100) NOT NULL,
+                step_number INT NOT NULL,
+                step_type VARCHAR(50) NOT NULL,
+                content TEXT NOT NULL,
+                duration_ms INT,
+                metadata JSONB,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_reasoning_session ON reasoning_traces(session_id);
+            CREATE INDEX IF NOT EXISTS idx_reasoning_user ON reasoning_traces(user_id, created_at DESC);
+            
+            -- Tool usage tracking
+            CREATE TABLE IF NOT EXISTS tool_usage (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                tool_name VARCHAR(100) NOT NULL,
+                tool_input JSONB,
+                tool_output JSONB,
+                status VARCHAR(20) DEFAULT 'success',
+                execution_time_ms INT,
+                error_message TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_tool_user ON tool_usage(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_tool_name ON tool_usage(tool_name, created_at DESC);
+            
+            -- Proactive suggestions sent
+            CREATE TABLE IF NOT EXISTS proactive_suggestions (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                suggestion_type VARCHAR(100) NOT NULL,
+                suggestion_content TEXT NOT NULL,
+                trigger_reason TEXT,
+                was_accepted BOOLEAN,
+                response_action TEXT,
+                sent_at TIMESTAMPTZ DEFAULT NOW(),
+                responded_at TIMESTAMPTZ
+            );
+            CREATE INDEX IF NOT EXISTS idx_suggestions_user ON proactive_suggestions(user_id, sent_at DESC);
+            
+            -- Daily briefings generated
+            CREATE TABLE IF NOT EXISTS daily_briefings (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                briefing_date DATE NOT NULL,
+                content TEXT NOT NULL,
+                sections JSONB DEFAULT '{}'::jsonb,
+                was_sent BOOLEAN DEFAULT FALSE,
+                was_read BOOLEAN DEFAULT FALSE,
+                sent_at TIMESTAMPTZ,
+                read_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(user_id, briefing_date)
+            );
+            CREATE INDEX IF NOT EXISTS idx_briefings_user ON daily_briefings(user_id, briefing_date DESC);
+            
+            -- Telegram profile cache (for /analyze command)
+            CREATE TABLE IF NOT EXISTS telegram_profile_cache (
+                username VARCHAR(255) PRIMARY KEY,
+                user_id BIGINT,
+                first_name VARCHAR(255),
+                last_name VARCHAR(255),
+                bio TEXT,
+                profile_photo_url TEXT,
+                is_premium BOOLEAN DEFAULT FALSE,
+                is_bot BOOLEAN DEFAULT FALSE,
+                social_links JSONB DEFAULT '[]'::jsonb,
+                ai_analysis TEXT,
+                fetch_count INT DEFAULT 1,
+                last_fetched_at TIMESTAMPTZ DEFAULT NOW(),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_profile_cache_fetched ON telegram_profile_cache(last_fetched_at DESC);
         ''')
         
         # Insert default bot templates
