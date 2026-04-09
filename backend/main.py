@@ -65,7 +65,7 @@ async def start_bot_runtime():
 async def stop_bot_runtime(): 
     pass
 from handlers import (
-    start_command, help_command, menu_command,
+    start_command, help_command, menu_command, analyze_command,
     remind_command, reminders_command, del_reminder_command, snooze_reminder_command,
     note_command, notes_command, search_notes_command, del_note_command,
     task_command, tasks_command, done_command, del_task_command,
@@ -116,6 +116,7 @@ async def setup_telegram_app() -> Application:
         ("menu", menu_command),
         ("profile", profile_command),
         ("leaderboard", leaderboard_command),
+        ("analyze", analyze_command),  # Profile analyzer - analyze any Telegram user
         
         # Reminders
         ("remind", remind_command),

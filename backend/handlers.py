@@ -515,6 +515,68 @@ Use the `/build` menu to access:
         await message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
 
+async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /analyze command - analyze a Telegram user profile."""
+    await track_command(update.effective_user.id, "analyze")
+    
+    # Check if username is provided
+    if not context.args or len(context.args) == 0:
+        await update.message.reply_text(
+            "*Profile Analyzer*\n\n"
+            "Analyze any public Telegram profile to get insights!\n\n"
+            "*Usage:* `/analyze @username`\n"
+            "*Example:* `/analyze @durov`\n\n"
+            "I'll fetch public information and provide AI-powered insights about the user.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    username = context.args[0].lstrip('@')
+    
+    # Send typing action
+    await update.message.chat.send_action(ChatAction.TYPING)
+    
+    # Send initial message
+    analyzing_msg = await update.message.reply_text(
+        f"Analyzing profile @{username}...",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    try:
+        # Import and use the tools engine
+        from tools_engine import get_tools_engine
+        
+        tools = get_tools_engine()
+        result = await tools.telegram_profile.analyze_profile(username, include_ai_analysis=True)
+        
+        if result.is_success:
+            # Format the response
+            response = result.to_context()
+            
+            # Add action buttons
+            keyboard = [
+                [InlineKeyboardButton("Open in Telegram", url=f"https://t.me/{username}")],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await analyzing_msg.edit_text(
+                response,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+        else:
+            await analyzing_msg.edit_text(
+                f"Could not analyze @{username}.\n\n{result.error}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+    except Exception as e:
+        await analyzing_msg.edit_text(
+            f"Error analyzing profile: {str(e)}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /menu command."""
     await track_command(update.effective_user.id, "menu")

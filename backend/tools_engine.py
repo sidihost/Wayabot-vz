@@ -34,6 +34,7 @@ class ToolType(str, Enum):
     WEATHER = "weather"
     NEWS = "news"
     TRANSLATION = "translation"
+    TELEGRAM_PROFILE = "telegram_profile"
 
 
 class ToolStatus(str, Enum):
@@ -75,6 +76,8 @@ class ToolResult:
             return self._format_weather()
         elif self.tool == ToolType.CALCULATOR:
             return f"Calculation result: {self.data}"
+        elif self.tool == ToolType.TELEGRAM_PROFILE:
+            return self._format_telegram_profile()
         else:
             return str(self.data)
     
@@ -113,6 +116,46 @@ class ToolResult:
                f"- Temperature: {w.get('temperature', 'N/A')}\n" \
                f"- Conditions: {w.get('conditions', 'N/A')}\n" \
                f"- Humidity: {w.get('humidity', 'N/A')}"
+    
+    def _format_telegram_profile(self) -> str:
+        if not self.data:
+            return "[Could not analyze profile]"
+        p = self.data
+        lines = [f"**Telegram Profile Analysis: @{p.get('username', 'Unknown')}**\n"]
+        
+        # Basic info
+        if p.get('first_name') or p.get('last_name'):
+            name = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
+            lines.append(f"**Name:** {name}")
+        if p.get('bio'):
+            lines.append(f"**Bio:** {p['bio']}")
+        if p.get('user_id'):
+            lines.append(f"**User ID:** `{p['user_id']}`")
+        
+        # Account features
+        features = []
+        if p.get('is_premium'):
+            features.append("Premium")
+        if p.get('has_private_forwards'):
+            features.append("Private Forwards")
+        if p.get('is_bot'):
+            features.append("Bot Account")
+        if features:
+            lines.append(f"**Features:** {', '.join(features)}")
+        
+        # Profile photos
+        if p.get('photo_count'):
+            lines.append(f"**Profile Photos:** {p['photo_count']}")
+        
+        # AI Analysis
+        if p.get('ai_analysis'):
+            lines.append(f"\n**AI Insights:**\n{p['ai_analysis']}")
+        
+        # Social links
+        if p.get('social_links'):
+            lines.append(f"\n**Detected Links:** {', '.join(p['social_links'])}")
+        
+        return "\n".join(lines)
 
 
 @dataclass
@@ -859,6 +902,306 @@ class WeatherTool:
             await self.session.close()
 
 
+class TelegramProfileTool:
+    """
+    Telegram profile analysis tool.
+    Fetches and analyzes public Telegram user profiles.
+    """
+    
+    def __init__(self):
+        self.bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY")
+        self.session: Optional[aiohttp.ClientSession] = None
+    
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=30)
+            )
+        return self.session
+    
+    async def analyze_profile(
+        self,
+        username: str,
+        include_ai_analysis: bool = True
+    ) -> ToolResult:
+        """
+        Analyze a Telegram user profile by username.
+        
+        Args:
+            username: Telegram username (with or without @)
+            include_ai_analysis: Whether to include AI-powered insights
+        
+        Returns:
+            ToolResult with profile information and analysis
+        """
+        start_time = datetime.now(timezone.utc)
+        
+        # Clean username
+        username = username.strip().lstrip('@')
+        
+        if not username:
+            return ToolResult(
+                tool=ToolType.TELEGRAM_PROFILE,
+                status=ToolStatus.ERROR,
+                error="Please provide a valid Telegram username"
+            )
+        
+        try:
+            # Gather profile data from multiple sources
+            profile_data = await self._fetch_profile_data(username)
+            
+            if not profile_data:
+                return ToolResult(
+                    tool=ToolType.TELEGRAM_PROFILE,
+                    status=ToolStatus.ERROR,
+                    error=f"Could not find profile for @{username}. The user may not exist or may have privacy settings enabled."
+                )
+            
+            # Add AI analysis if enabled and we have OpenAI
+            if include_ai_analysis and self.openai_api_key:
+                ai_analysis = await self._generate_ai_analysis(profile_data)
+                profile_data['ai_analysis'] = ai_analysis
+            
+            elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+            
+            return ToolResult(
+                tool=ToolType.TELEGRAM_PROFILE,
+                status=ToolStatus.SUCCESS,
+                data=profile_data,
+                execution_time_ms=int(elapsed),
+                metadata={"username": username}
+            )
+            
+        except Exception as e:
+            logger.error(f"Profile analysis failed for @{username}: {e}")
+            return ToolResult(
+                tool=ToolType.TELEGRAM_PROFILE,
+                status=ToolStatus.ERROR,
+                error=f"Error analyzing profile: {str(e)}"
+            )
+    
+    async def _fetch_profile_data(self, username: str) -> Optional[Dict[str, Any]]:
+        """Fetch profile data using multiple methods"""
+        profile_data = {
+            'username': username,
+            'first_name': None,
+            'last_name': None,
+            'bio': None,
+            'user_id': None,
+            'is_premium': False,
+            'is_bot': False,
+            'has_private_forwards': False,
+            'photo_count': 0,
+            'social_links': [],
+            'profile_photo_url': None,
+        }
+        
+        session = await self._get_session()
+        
+        # Method 1: Try t.me web scraping for public info
+        try:
+            async with session.get(
+                f"https://t.me/{username}",
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; WayaBot/2.0)'}
+            ) as resp:
+                if resp.status == 200:
+                    html = await resp.text()
+                    
+                    # Extract profile info from HTML
+                    import re
+                    
+                    # Name extraction
+                    name_match = re.search(r'<div class="tgme_page_title"><span[^>]*>([^<]+)</span>', html)
+                    if name_match:
+                        full_name = name_match.group(1).strip()
+                        parts = full_name.split(' ', 1)
+                        profile_data['first_name'] = parts[0]
+                        if len(parts) > 1:
+                            profile_data['last_name'] = parts[1]
+                    
+                    # Bio extraction
+                    bio_match = re.search(r'<div class="tgme_page_description[^"]*">([^<]+)', html)
+                    if bio_match:
+                        profile_data['bio'] = bio_match.group(1).strip()
+                    
+                    # Profile photo
+                    photo_match = re.search(r'<img class="tgme_page_photo_image"[^>]+src="([^"]+)"', html)
+                    if photo_match:
+                        profile_data['profile_photo_url'] = photo_match.group(1)
+                        profile_data['photo_count'] = 1
+                    
+                    # Check if it's a bot
+                    if 'tgme_page_extra">bot' in html.lower():
+                        profile_data['is_bot'] = True
+                    
+                    # Extract any links in bio
+                    links = re.findall(r'href="(https?://[^"]+)"', html)
+                    social_patterns = ['twitter', 'instagram', 'github', 'linkedin', 'youtube', 'tiktok', 'facebook']
+                    for link in links:
+                        for pattern in social_patterns:
+                            if pattern in link.lower():
+                                profile_data['social_links'].append(link)
+                                break
+                    
+                    # Check page validity
+                    if 'tgme_page_title' in html or 'tgme_page_photo_image' in html:
+                        return profile_data
+        except Exception as e:
+            logger.warning(f"t.me scraping failed: {e}")
+        
+        # Method 2: Try Telegram Bot API if we have the bot token
+        if self.bot_token:
+            try:
+                # We can get user info through the bot API if the user has interacted
+                # This is limited but can provide additional data
+                pass
+            except Exception as e:
+                logger.warning(f"Bot API profile fetch failed: {e}")
+        
+        # Method 3: Try telemetr.io or similar public profile services
+        try:
+            async with session.get(
+                f"https://telemetr.io/api/tg/users/{username}",
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; WayaBot/2.0)'}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data:
+                        profile_data['user_id'] = data.get('id')
+                        profile_data['first_name'] = data.get('first_name') or profile_data['first_name']
+                        profile_data['last_name'] = data.get('last_name') or profile_data['last_name']
+                        if data.get('photo'):
+                            profile_data['photo_count'] = 1
+                        return profile_data
+        except Exception as e:
+            logger.warning(f"Telemetr.io fetch failed: {e}")
+        
+        # Return what we have if we got any data
+        if profile_data['first_name'] or profile_data['bio']:
+            return profile_data
+        
+        return None
+    
+    async def _generate_ai_analysis(self, profile_data: Dict[str, Any]) -> str:
+        """Generate AI-powered analysis of the profile"""
+        if not self.openai_api_key:
+            return ""
+        
+        session = await self._get_session()
+        
+        # Build profile summary for AI
+        profile_summary = f"""
+Username: @{profile_data.get('username', 'Unknown')}
+Name: {profile_data.get('first_name', '')} {profile_data.get('last_name', '')}
+Bio: {profile_data.get('bio', 'No bio')}
+Is Bot: {profile_data.get('is_bot', False)}
+Is Premium: {profile_data.get('is_premium', False)}
+Social Links: {', '.join(profile_data.get('social_links', [])) or 'None detected'}
+"""
+        
+        try:
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.openai_api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": """You are an expert at analyzing Telegram profiles. Based on the available public information, provide brief insights about:
+1. What this user might be interested in based on their bio/name
+2. Whether this appears to be a personal or professional account
+3. Any notable observations
+4. Potential topics for conversation
+
+Keep your analysis concise (3-4 sentences), professional, and respectful of privacy. Only analyze what is publicly visible."""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Analyze this Telegram profile:\n{profile_summary}"
+                    }
+                ],
+                "max_tokens": 200,
+                "temperature": 0.7
+            }
+            
+            async with session.post(url, headers=headers, json=payload) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data['choices'][0]['message']['content']
+        except Exception as e:
+            logger.warning(f"AI analysis failed: {e}")
+        
+        return ""
+    
+    async def analyze_by_user_id(self, user_id: int) -> ToolResult:
+        """
+        Analyze profile by Telegram user ID.
+        Limited info available through this method.
+        """
+        start_time = datetime.now(timezone.utc)
+        
+        if not self.bot_token:
+            return ToolResult(
+                tool=ToolType.TELEGRAM_PROFILE,
+                status=ToolStatus.ERROR,
+                error="Bot token required for user ID lookup"
+            )
+        
+        try:
+            session = await self._get_session()
+            
+            # Try to get user profile photos
+            url = f"https://api.telegram.org/bot{self.bot_token}/getUserProfilePhotos"
+            async with session.post(url, json={"user_id": user_id}) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('ok'):
+                        photos = data.get('result', {})
+                        photo_count = photos.get('total_count', 0)
+                        
+                        profile_data = {
+                            'user_id': user_id,
+                            'username': None,
+                            'first_name': None,
+                            'last_name': None,
+                            'bio': None,
+                            'photo_count': photo_count,
+                            'is_premium': False,
+                            'is_bot': False,
+                        }
+                        
+                        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+                        
+                        return ToolResult(
+                            tool=ToolType.TELEGRAM_PROFILE,
+                            status=ToolStatus.SUCCESS,
+                            data=profile_data,
+                            execution_time_ms=int(elapsed),
+                            metadata={"user_id": user_id, "note": "Limited data available via user ID"}
+                        )
+            
+            return ToolResult(
+                tool=ToolType.TELEGRAM_PROFILE,
+                status=ToolStatus.ERROR,
+                error=f"Could not fetch profile for user ID {user_id}"
+            )
+            
+        except Exception as e:
+            return ToolResult(
+                tool=ToolType.TELEGRAM_PROFILE,
+                status=ToolStatus.ERROR,
+                error=str(e)
+            )
+    
+    async def close(self):
+        if self.session and not self.session.closed:
+            await self.session.close()
+
+
 class ToolsEngine:
     """
     Master tools engine that manages all tools and handles tool selection.
@@ -871,6 +1214,7 @@ class ToolsEngine:
         self.document_processing = DocumentProcessingTool()
         self.calculator = CalculatorTool()
         self.weather = WeatherTool()
+        self.telegram_profile = TelegramProfileTool()
     
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of available tools for AI to use"""
@@ -920,6 +1264,14 @@ class ToolsEngine:
                 "parameters": {
                     "location": "City name or location"
                 }
+            },
+            {
+                "name": "telegram_profile",
+                "description": "Analyze a Telegram user profile by username. Get info about users, detect their interests, social links, and more.",
+                "parameters": {
+                    "username": "Telegram username (with or without @)",
+                    "include_ai_analysis": "Whether to include AI-powered insights (default true)"
+                }
             }
         ]
     
@@ -953,6 +1305,10 @@ class ToolsEngine:
             ))(),
             "weather": lambda: self.weather.get_weather(
                 kwargs.get("location", "")
+            ),
+            "telegram_profile": lambda: self.telegram_profile.analyze_profile(
+                kwargs.get("username", ""),
+                kwargs.get("include_ai_analysis", True)
             )
         }
         
@@ -1014,6 +1370,24 @@ class ToolsEngine:
             if code_match:
                 return ("code_execution", {"code": code_match.group(1)})
         
+        # Telegram profile analysis triggers
+        profile_triggers = [
+            "analyze profile", "check profile", "who is @", "tell me about @",
+            "look up @", "profile of @", "info on @", "analyze @", "stalk @",
+            "investigate @", "find @", "lookup @", "profile @"
+        ]
+        if any(trigger in message_lower for trigger in profile_triggers):
+            # Extract username
+            username_match = re.search(r'@(\w+)', message)
+            if username_match:
+                return ("telegram_profile", {"username": username_match.group(1)})
+        
+        # Also detect direct username mentions with context
+        if re.search(r'(?:analyze|check|who is|tell me about|look up|info)\s+@?(\w{5,})', message_lower):
+            username_match = re.search(r'@(\w+)', message)
+            if username_match:
+                return ("telegram_profile", {"username": username_match.group(1)})
+        
         return None
     
     async def close(self):
@@ -1022,6 +1396,7 @@ class ToolsEngine:
         await self.image_analysis.close()
         await self.document_processing.close()
         await self.weather.close()
+        await self.telegram_profile.close()
 
 
 # Global tools engine instance
