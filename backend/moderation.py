@@ -15,7 +15,7 @@ from enum import Enum
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
-from ai_engine import get_groq_client, BEST_MODEL
+from ai_engine import get_groq_client, chat_completion, BEST_MODEL
 from telegram_api import TelegramAPI, get_telegram_api, ChatPermissions
 from database import get_connection
 

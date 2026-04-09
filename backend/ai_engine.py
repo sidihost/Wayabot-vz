@@ -513,10 +513,8 @@ async def generate_response_streaming(
 ):
     """
     Generate AI response with streaming support.
-    Yields chunks of text as they are generated.
+    Falls back to non-streaming if Groq is not available.
     """
-    client = get_groq_client()
-    
     # Build the system prompt
     base_prompt = system_prompt or WAYA_SYSTEM_PROMPT
     if user_name:
@@ -536,26 +534,34 @@ async def generate_response_streaming(
     
     messages.append({"role": "user", "content": user_message})
     
+    # Try Groq streaming first
+    client = get_groq_client()
+    if client:
+        try:
+            stream = await client.chat.completions.create(
+                model=BEST_MODEL,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True
+            )
+            
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+            return
+        except Exception as e:
+            print(f"[AI] Groq streaming failed: {e}")
+    
+    # Fall back to non-streaming chat_completion
     try:
-        # Use streaming
-        stream = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stream=True
-        )
-        
-        async for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-                
-    except Exception as e:
-        error_str = str(e).lower()
-        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
-            yield "I'm having trouble connecting right now. Please try again in a moment."
+        result = await chat_completion(messages, temperature, max_tokens)
+        if result:
+            yield result
         else:
-            yield "I apologize, but I encountered an issue. Please try again."
+            yield "I'm having trouble connecting right now. Please try again in a moment."
+    except Exception as e:
+        yield "I apologize, but I encountered an issue. Please try again."
 
 
 async def generate_empathic_response(
@@ -565,8 +571,6 @@ async def generate_empathic_response(
     emotion_intensity: str = "neutral"
 ) -> str:
     """Generate a deeply empathic response based on detected emotions."""
-    client = get_groq_client()
-    
     empathy_prompts = {
         "positive": f"""You are responding to {user_name} who is feeling {dominant_emotion}.
 They're in a positive emotional state. Match their energy - be warm, enthusiastic, and celebratory.
@@ -585,26 +589,22 @@ Be warm, helpful, and attentive. Adapt your tone based on what they need."""
     system_prompt = empathy_prompts.get(emotion_intensity, empathy_prompts["neutral"])
     system_prompt += "\n\nRespond naturally and authentically. Don't mention that you detected their emotions unless it feels natural."
     
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message}
+    ]
+    
+    temp = 0.7 if emotion_intensity == "neutral" else (0.5 if emotion_intensity == "negative" else 0.8)
+    
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=0.7 if emotion_intensity == "neutral" else (0.5 if emotion_intensity == "negative" else 0.8),
-            max_tokens=1024
-        )
-        return response.choices[0].message.content
+        result = await chat_completion(messages, temperature=temp, max_tokens=1024)
+        return result or "I'm here for you."
     except Exception as e:
-        return f"I'm here for you. {str(e)}"
+        return "I'm here for you."
 
 
 async def generate_bot_suggestion(user_request: str) -> Dict[str, Any]:
-    """Generate COMPLETE bot with code - fully autonomous AI builder."""
-    client = get_groq_client()
-    
-    # This is the key - AI writes actual code, not just config!
+    """Generate COMPLETE bot configuration using AI."""
     prompt = f"""You're an expert Telegram bot developer. Create a COMPLETE working bot based on user request.
 
 User Request: {user_request}
@@ -621,7 +621,6 @@ Create a full bot configuration. Respond with JSON:
         {{"command": "/help", "description": "Get help"}},
         {{"command": "/example", "description": "Example action"}}
     ],
-    "code_example": "Optional: if there's a specific function needed, show brief Python code here",
     "response_templates": {{
         "greeting": "Hey! I'm [name]. [what I do]. How can I help?",
         "help": "Available commands: /help, /example",
@@ -637,21 +636,18 @@ IMPORTANT:
 
 Respond ONLY with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are an expert Telegram bot developer. Create simple, working bots. Be concise."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert Telegram bot developer. Create simple, working bots. Be concise."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1500
-        )
+        result = await chat_completion(messages, temperature=0.7, max_tokens=1500)
+        if not result:
+            return _create_fallback_bot_config(user_request)
         
-        result = response.choices[0].message.content
         try:
             config = json.loads(result)
-            # Add the original request for reference
             config['user_original_request'] = user_request
             return config
         except json.JSONDecodeError:
@@ -661,15 +657,9 @@ Respond ONLY with valid JSON."""
                 config = json.loads(json_match.group())
                 config['user_original_request'] = user_request
                 return config
-            # Return a working fallback instead of error
             return _create_fallback_bot_config(user_request)
     except Exception as e:
-        error_str = str(e).lower()
-        # Check for API key/access issues
-        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
-            # Return a working fallback bot config instead of failing
-            return _create_fallback_bot_config(user_request)
-        return {"error": "AI service temporarily unavailable. Please try again in a moment."}
+        return _create_fallback_bot_config(user_request)
 
 
 def _create_fallback_bot_config(user_request: str) -> Dict[str, Any]:
@@ -696,8 +686,6 @@ def _create_fallback_bot_config(user_request: str) -> Dict[str, Any]:
 
 async def analyze_message_intent(message: str) -> Dict[str, Any]:
     """Analyze the intent of a user message."""
-    client = get_groq_client()
-    
     prompt = f"""Analyze the following message and determine the user's intent.
 
 Message: {message}
@@ -715,18 +703,16 @@ Respond with a JSON object:
 
 Only respond with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a message intent analyzer. Respond only with valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a message intent analyzer. Respond only with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=512
-        )
+        result = await chat_completion(messages, temperature=0.3, max_tokens=512)
+        if not result:
+            return {"intent": "other", "sentiment": "neutral"}
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
@@ -741,8 +727,6 @@ Only respond with valid JSON."""
 
 async def parse_reminder_request(message: str) -> Dict[str, Any]:
     """Parse a reminder request from natural language."""
-    client = get_groq_client()
-    
     current_time = datetime.now()
     
     prompt = f"""Parse this reminder request and extract the details.
@@ -760,18 +744,16 @@ Respond with JSON:
 
 Only respond with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a datetime parsing expert. Respond only with valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a datetime parsing expert. Respond only with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=256
-        )
+        result = await chat_completion(messages, temperature=0.2, max_tokens=256)
+        if not result:
+            return {"error": "AI service unavailable"}
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
@@ -786,8 +768,6 @@ Only respond with valid JSON."""
 
 async def parse_task_request(message: str) -> Dict[str, Any]:
     """Parse a task creation request from natural language."""
-    client = get_groq_client()
-    
     prompt = f"""Parse this task request and extract the details.
 
 Message: {message}
@@ -804,18 +784,16 @@ Respond with JSON:
 Priority must be one of: low, normal, high, urgent. Default to "normal" if not specified.
 Only respond with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a task parsing expert. Respond only with valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a task parsing expert. Respond only with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=256
-        )
+        result = await chat_completion(messages, temperature=0.2, max_tokens=256)
+        if not result:
+            return {"error": "AI service unavailable"}
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
@@ -830,46 +808,34 @@ Only respond with valid JSON."""
 
 async def summarize_text(text: str, max_length: int = 200) -> str:
     """Summarize a piece of text."""
-    client = get_groq_client()
+    messages = [
+        {"role": "system", "content": f"Summarize the following text in {max_length} words or less. Be concise and capture the key points."},
+        {"role": "user", "content": text}
+    ]
     
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": f"Summarize the following text in {max_length} words or less. Be concise and capture the key points."},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.3,
-            max_tokens=max_length * 2
-        )
-        return response.choices[0].message.content
+        result = await chat_completion(messages, temperature=0.3, max_tokens=max_length * 2)
+        return result or "Could not summarize the text."
     except Exception as e:
         return f"Error summarizing: {str(e)}"
 
 
 async def translate_text(text: str, target_language: str) -> str:
     """Translate text to a target language."""
-    client = get_groq_client()
+    messages = [
+        {"role": "system", "content": f"Translate the following text to {target_language}. Provide only the translation, no explanations."},
+        {"role": "user", "content": text}
+    ]
     
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": f"Translate the following text to {target_language}. Provide only the translation, no explanations."},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.2,
-            max_tokens=1024
-        )
-        return response.choices[0].message.content
+        result = await chat_completion(messages, temperature=0.2, max_tokens=1024)
+        return result or "Could not translate the text."
     except Exception as e:
         return f"Error translating: {str(e)}"
 
 
 async def generate_quiz_question(topic: str, difficulty: str = "medium") -> Dict[str, Any]:
     """Generate a quiz question on a topic."""
-    client = get_groq_client()
-    
     prompt = f"""Generate a {difficulty} difficulty quiz question about: {topic}
 
 Respond with JSON:
@@ -882,18 +848,16 @@ Respond with JSON:
 
 Only respond with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a quiz question generator. Respond only with valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a quiz question generator. Respond only with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.8,
-            max_tokens=512
-        )
+        result = await chat_completion(messages, temperature=0.8, max_tokens=512)
+        if not result:
+            return {"error": "AI service unavailable"}
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
@@ -908,8 +872,6 @@ Only respond with valid JSON."""
 
 async def get_smart_suggestions(user_context: Dict[str, Any]) -> List[str]:
     """Generate smart suggestions based on user context."""
-    client = get_groq_client()
-    
     context_str = json.dumps(user_context, indent=2)
     
     prompt = f"""Based on the following user context, suggest 3-5 helpful actions or things the user might want to do next.
@@ -922,18 +884,16 @@ Respond with a JSON array of suggestion strings:
 
 Only respond with valid JSON array."""
 
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant suggesting next actions. Respond only with a JSON array."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant suggesting next actions. Respond only with a JSON array."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=256
-        )
+        result = await chat_completion(messages, temperature=0.7, max_tokens=256)
+        if not result:
+            return ["Check your tasks", "Set a reminder", "Create a note"]
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
