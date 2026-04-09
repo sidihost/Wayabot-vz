@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 
-from ai_engine import get_groq_client, BEST_MODEL
+from ai_engine import get_groq_client, chat_completion, BEST_MODEL
 from telegram_api import TelegramAPI, get_telegram_api
 from database import get_connection
 
@@ -577,8 +577,6 @@ async def suggest_content_timing(
     Returns:
         Timing suggestions
     """
-    client = get_groq_client()
-    
     system_prompt = """You are a social media timing expert. Given content, suggest the best times to post for maximum engagement.
 
 Return a JSON object:
@@ -597,18 +595,24 @@ Return ONLY valid JSON."""
 
     user_prompt = f"Suggest optimal posting time for this {chat_type} content:\n\n{content[:500]}"
     
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+    
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.5,
-            max_tokens=300
-        )
+        result_text = await chat_completion(messages, temperature=0.5, max_tokens=300)
+        if not result_text:
+            return {
+                "recommended_day": "Tuesday",
+                "recommended_hour": 10,
+                "reasoning": "Default recommendation",
+                "alternative_times": [],
+                "content_type": "general",
+                "audience_type": "mixed"
+            }
         
-        result_text = response.choices[0].message.content.strip()
+        result_text = result_text.strip()
         
         # Handle code blocks
         if "```json" in result_text:
@@ -644,8 +648,6 @@ async def generate_content_variations(
     Returns:
         List of content variations
     """
-    client = get_groq_client()
-    
     system_prompt = f"""Generate {count} variations of the given content. Each should:
 - Convey the same message
 - Use different wording/tone
@@ -656,18 +658,17 @@ Return a JSON array of strings:
 
 Return ONLY valid JSON array."""
 
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Generate variations for:\n\n{original_content}"}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Generate variations for:\n\n{original_content}"}
-            ],
-            temperature=0.8,
-            max_tokens=500
-        )
+        result_text = await chat_completion(messages, temperature=0.8, max_tokens=500)
+        if not result_text:
+            return [original_content]
         
-        result_text = response.choices[0].message.content.strip()
+        result_text = result_text.strip()
         
         # Handle code blocks
         if "```json" in result_text:

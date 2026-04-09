@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime, timezone
 
-from ai_engine import get_groq_client, BEST_MODEL
+from ai_engine import get_groq_client, chat_completion, BEST_MODEL
 from telegram_api import TelegramAPI, get_telegram_api, ReactionEmoji
 from database import get_connection
 
@@ -110,8 +110,6 @@ async def analyze_message_emotion(
     Returns:
         EmotionAnalysis with detected emotions
     """
-    client = get_groq_client()
-    
     system_prompt = """You are an emotion analyzer. Analyze the given message and return a JSON object with:
 {
     "emotion": "primary emotion (joy, gratitude, excitement, question, agreement, surprise, sadness, celebration, love, anger, humor, support, neutral, achievement, fear)",
@@ -128,18 +126,20 @@ Be precise and consider context. Return ONLY valid JSON."""
     if context:
         user_prompt += f"\n\nConversation context: {context}"
     
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+    
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.3,
-            max_tokens=200
-        )
+        result_text = await chat_completion(messages, temperature=0.3, max_tokens=200)
+        if not result_text:
+            return EmotionAnalysis(
+                emotion="neutral", confidence=0.0, secondary_emotions=[],
+                sentiment="neutral", intensity="low", keywords=[]
+            )
         
-        result_text = response.choices[0].message.content.strip()
+        result_text = result_text.strip()
         
         # Parse JSON response
         # Handle potential markdown code blocks
@@ -626,8 +626,6 @@ async def analyze_conversation_context(
     Returns:
         Context analysis with topic, mood, engagement level
     """
-    client = get_groq_client()
-    
     # Format recent messages
     recent = messages[-max_messages:] if len(messages) > max_messages else messages
     formatted = "\n".join([f"{m['role']}: {m['content']}" for m in recent])
@@ -645,18 +643,21 @@ async def analyze_conversation_context(
 
 Return ONLY valid JSON."""
     
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Conversation:\n{formatted}"}
+    ]
+    
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Conversation:\n{formatted}"}
-            ],
-            temperature=0.3,
-            max_tokens=300
-        )
+        result_text = await chat_completion(messages, temperature=0.3, max_tokens=300)
+        if not result_text:
+            return {
+                "topic": "unknown", "mood": "neutral", "engagement_level": "medium",
+                "user_intent": "unknown", "suggested_tone": "friendly",
+                "key_entities": [], "context_summary": ""
+            }
         
-        result_text = response.choices[0].message.content.strip()
+        result_text = result_text.strip()
         
         # Handle code blocks
         if "```json" in result_text:

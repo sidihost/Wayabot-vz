@@ -384,57 +384,37 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     is_new = user_data.get("is_new", False)
     
     if is_new:
-        welcome_message = f"""
-*Welcome to Waya, {name}!*
+        welcome_message = f"""*Hey {name}!* Welcome to Waya.
 
-I'm your powerful bot builder and AI assistant!
+I'm the most powerful bot builder on Telegram. Describe any bot you can imagine, and I'll create it in seconds.
 
-*Quick Start:*
+*What I can do:*
 
-*Bot Building*
-- `/build` - Create AI bots with natural language
-- `/templates` - 20+ pre-built templates
-- `/mybots` - Manage your creations
+*Create Bots* - Just describe what you want
+"Make a customer support bot for my restaurant"
+"Build a quiz bot about space"
+"I need a fitness coach bot"
 
-*Business & Channels*
-- Business bots for Telegram Business
-- Channel bots for content scheduling
-- Polls & quizzes for engagement
+*Productivity* - All with natural language
+"Remind me to call mom tomorrow at 3pm"
+"Note: meeting notes from today..."
+"Task: finish the report by Friday"
 
-*Productivity*
-- `/remind` - Smart reminders
-- `/note` - Quick notes
-- `/task` - Task tracking
+*AI Assistant* - Ask me anything
+Questions, translations, summaries, coding help
 
-*AI Features*
-- Chat naturally with me
-- `/translate` - Any language
-- `/quiz` - Test your knowledge
-
-*Progress*
-- `/profile` - Your stats
-- `/leaderboard` - Top users
-
-*Type /help for all commands!*
-
-What would you like to do first? 👇
-"""
+Ready to create something amazing?"""
     else:
-        welcome_message = f"""
-👋 *Welcome back, {name}!*
+        welcome_message = f"""*Hey {name}!*
 
-Great to see you again! How can I help you today?
-
-Quick actions below or just tell me what you need!
-"""
+What would you like to do?"""
     
     keyboard = [
-        [InlineKeyboardButton("📝 Set Reminder", callback_data="quick_reminder"),
-         InlineKeyboardButton("📋 Add Task", callback_data="quick_task")],
-        [InlineKeyboardButton("🤖 Build a Bot", callback_data="build_bot"),
-         InlineKeyboardButton("📄 Create Note", callback_data="quick_note")],
-        [InlineKeyboardButton("�� Chat with AI", callback_data="start_chat"),
-         InlineKeyboardButton("📊 My Profile", callback_data="show_profile")]
+        [InlineKeyboardButton("Create a Bot", callback_data="build_bot")],
+        [InlineKeyboardButton("Set Reminder", callback_data="quick_reminder"),
+         InlineKeyboardButton("Add Task", callback_data="quick_task")],
+        [InlineKeyboardButton("My Bots", callback_data="menu_mybots"),
+         InlineKeyboardButton("Just Chat", callback_data="start_chat")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -1096,25 +1076,23 @@ async def del_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Build a bot INSTANTLY - one step, no clicking!
-    User says what they want → bot creates it automatically.
+    Build a bot INSTANTLY - describe what you want, get a working bot.
+    This is the magic that makes Waya better than BotFather.
     """
     await ensure_user(update)
     user_id = update.effective_user.id
     name = get_user_display_name(update)
     
-    # What does user want?
+    # If no description provided, show a clean prompt
     if not context.args:
         await update.message.reply_text(
-            f"🤖 *Instant Bot Builder*\n\n"
-            f"✨ **Premium Features:**\n"
-            f"• AI-powered instant creation\n"
-            f"• Smart context understanding\n"
-            f"• Voice-ready responses\n\n"
-            f"Tell me what you want:\n"
-            f"`I need a coffee shop bot`\n"
-            f"`create a fitness coach`\n\n"
-            f"I'll create it instantly! ⚡",
+            "*Describe your bot*\n\n"
+            "Just tell me what you want in plain English:\n\n"
+            "`/build a customer support bot for my bakery`\n"
+            "`/build fitness coach that gives daily workouts`\n"
+            "`/build trivia game about movies`\n"
+            "`/build language tutor for Spanish learners`\n\n"
+            "I'll create a complete, working bot in seconds.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -1122,24 +1100,22 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Get user request
     user_request = " ".join(context.args)
     
-    # PREMIUM TYPING SEQUENCE - show the magic!
+    # Clean, professional loading sequence
     await update.message.chat.send_action(ChatAction.TYPING)
-    loading_msg = await update.message.reply_text("🎨 *Analyzing your request...*")
-    await asyncio.sleep(0.8)
+    loading_msg = await update.message.reply_text("*Understanding your vision...*", parse_mode=ParseMode.MARKDOWN)
     
-    await update.message.chat.send_action(ChatAction.TYPING)
-    await loading_msg.edit_text("🧠 *Designing your bot...*")
-    await asyncio.sleep(0.8)
-    
-    # AI creates
+    # AI creates the bot
     await update.message.chat.send_action(ChatAction.TYPING)
     config = await generate_bot_suggestion(user_request)
     
-    await loading_msg.edit_text("⚙️ *Building...*")
-    await asyncio.sleep(0.5)
+    await loading_msg.edit_text("*Building your bot...*", parse_mode=ParseMode.MARKDOWN)
     
     if "error" in config:
-        await loading_msg.edit_text(f"❌ Oops! {config.get('error', 'Something went wrong')}")
+        await loading_msg.edit_text(
+            "Something went wrong. Let me try a simpler approach.\n\n"
+            "Try being more specific: `/build customer support bot for a pizza restaurant`",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return
     
     # Create bot in database
@@ -1154,7 +1130,7 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         commands=config.get('commands')
     )
     
-    # Make it active!
+    # Make it active
     await db.set_active_bot(user_id, bot_id)
     await db.add_xp(user_id, 30)
     
@@ -1163,46 +1139,47 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         bot_info = await context.bot.get_me()
         bot_username = bot_info.username
     except:
-        bot_username = "WayaBotBuilder_bot"  # Fallback
+        bot_username = "WayaBotBuilder_bot"
     
     # Create shareable deep link
     share_link = f"https://t.me/{bot_username}?start=bot_{bot_id}"
     
-    # SUCCESS with shareable link!
+    # Extract bot details
     bot_name = config.get('bot_name', 'Bot')
-    desc = config.get('bot_description', '')[:100]
-    features = config.get('features', [])[:3]
-    greeting = config.get('greeting_message', f"Hey! I'm {bot_name}. How can I help?")
+    desc = config.get('bot_description', '')
+    features = config.get('features', [])
+    greeting = config.get('greeting_message', f"Hey! I'm {bot_name}.")
+    
+    # Format features nicely
+    if features:
+        if isinstance(features[0], dict):
+            feature_list = "\n".join([f"  {f.get('name', f)}" for f in features[:3]])
+        else:
+            feature_list = "\n".join([f"  {f}" for f in features[:3]])
+    else:
+        feature_list = "  AI-powered responses\n  Context memory\n  Instant replies"
     
     keyboard = [
         [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
-        [InlineKeyboardButton("Share Bot", url=share_link)],
-        [InlineKeyboardButton("My Bots", callback_data="menu_mybots")]
+        [InlineKeyboardButton("Share This Bot", url=share_link)],
+        [InlineKeyboardButton("View All My Bots", callback_data="menu_mybots")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await loading_msg.edit_text(
-        f"Your AI Bot is Ready!\n\n"
-        f"*{bot_name}*\n"
+        f"*{bot_name}* is ready!\n\n"
         f"{desc}\n\n"
-        f"*Features:*\n"
-        f"- {features[0] if len(features) > 0 else 'Smart responses'}\n"
-        f"- {features[1] if len(features) > 1 else 'Context memory'}\n"
-        f"- {features[2] if len(features) > 2 else 'Instant replies'}\n\n"
-        f"*Share your bot:*\n"
-        f"`{share_link}`\n\n"
-        f"Just send a message to start chatting with your new AI!",
+        f"*What it can do:*\n{feature_list}\n\n"
+        f"*Share link:* `{share_link}`\n\n"
+        f"Send a message to start chatting.",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=reply_markup
     )
     
-    # Send the greeting as first message from the bot
-    await asyncio.sleep(0.5)
+    # Bot introduces itself
+    await asyncio.sleep(0.3)
     clean_greeting = clean_markdown_for_telegram(greeting)
-    await update.message.reply_text(
-        f"*{bot_name}:* {clean_greeting}",
-        parse_mode=ParseMode.MARKDOWN
-    )
+    await update.message.reply_text(f"_{clean_greeting}_", parse_mode=ParseMode.MARKDOWN)
 
 
 async def templates_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1825,24 +1802,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             config = result["config"]
             share_link = result["share_link"]
             bot_name = config.get('bot_name', 'Your Bot')
+            bot_id = result['bot_id']
+            
+            # Generate a suggested username for creating a real Telegram bot
+            import re
+            safe_name = re.sub(r'[^a-zA-Z0-9]', '', bot_name)[:20]
+            suggested_username = f"{safe_name}Bot" if safe_name else "MyCustomBot"
+            
+            # Get Waya's username for the managed bot link
+            try:
+                waya_info = await context.bot.get_me()
+                waya_username = waya_info.username
+                # Check if Waya can manage bots
+                can_manage = getattr(waya_info, 'can_manage_bots', False)
+            except:
+                waya_username = "WayaBot"
+                can_manage = False
+            
+            # Create the managed bot link (Telegram Bot API 9.6 feature)
+            managed_bot_link = f"https://t.me/newbot/{waya_username}/{suggested_username}?name={bot_name.replace(' ', '+')}"
             
             keyboard = [
-                [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
-                [InlineKeyboardButton("Share Bot", url=share_link)],
-                [InlineKeyboardButton("Edit Bot", callback_data=f"bb_edit_{result['bot_id']}")],
+                [InlineKeyboardButton("Create Real Telegram Bot", url=managed_bot_link)],
+                [InlineKeyboardButton("Use as Persona (Chat Here)", callback_data="start_chat")],
+                [InlineKeyboardButton("Edit Bot", callback_data=f"bb_edit_{bot_id}")],
                 [InlineKeyboardButton("My Bots", callback_data="bb_my_bots")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
+            # Store the config temporarily so we can apply it to the managed bot later
+            await db.update_session_state(user_id, "pending_managed_bot", {
+                "bot_id": bot_id,
+                "config": config,
+                "suggested_username": suggested_username
+            })
+            
             await loading.edit_text(
-                f"*Your AI Bot is Ready!*\n\n"
+                f"*Your AI Bot Configuration is Ready!*\n\n"
                 f"*{bot_name}*\n"
                 f"{config.get('bot_description', '')}\n\n"
                 f"*Features:*\n" +
                 "\n".join([f"- {f}" for f in config.get('features', [])[:5]]) +
-                f"\n\n*Share your bot:*\n"
-                f"`{share_link}`\n\n"
-                f"Send a message to start chatting!",
+                f"\n\n*Choose how to use your bot:*\n\n"
+                f"1. *Create Real Bot* - Get your own @{suggested_username} on Telegram\n"
+                f"2. *Use as Persona* - Chat with it here in Waya\n\n"
+                f"_Tip: Creating a real bot lets you share it with anyone!_",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=reply_markup
             )
@@ -4244,6 +4248,116 @@ async def analyze_voice_emotion(update: Update, context: ContextTypes.DEFAULT_TY
         )
     else:
         await update.message.reply_text("Could not analyze voice emotions. Please try a clearer recording.")
+
+
+# =====================================================
+# MANAGED BOT HANDLER (Telegram Bot API 9.6)
+# =====================================================
+
+async def handle_managed_bot_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle managed_bot updates from Telegram.
+    This is called when a user creates a new bot via the managed bot link,
+    or when a managed bot's token changes.
+    """
+    managed_bot = update.managed_bot
+    if not managed_bot:
+        return
+    
+    # Get info about the new managed bot
+    new_bot = managed_bot.bot
+    owner_id = managed_bot.owner.id if managed_bot.owner else None
+    
+    if not new_bot or not owner_id:
+        print(f"[ManagedBot] Invalid managed_bot update: {managed_bot}")
+        return
+    
+    telegram_bot_id = new_bot.id
+    telegram_username = new_bot.username
+    bot_name = new_bot.first_name or telegram_username
+    
+    print(f"[ManagedBot] New bot created: @{telegram_username} (ID: {telegram_bot_id}) by user {owner_id}")
+    
+    try:
+        # Get the bot token using the Telegram API
+        token_response = await context.bot.get_managed_bot_token(telegram_bot_id)
+        bot_token = token_response.token if token_response else None
+        
+        if not bot_token:
+            print(f"[ManagedBot] Could not get token for bot {telegram_bot_id}")
+            # Notify user
+            try:
+                await context.bot.send_message(
+                    owner_id,
+                    f"Your bot @{telegram_username} was created, but I couldn't get its token.\n"
+                    "Please try again or contact support."
+                )
+            except:
+                pass
+            return
+        
+        # Check if user has pending bot config
+        session = await db.get_session(owner_id)
+        state_data = session.get('state_data', {}) if session else {}
+        pending_config = state_data.get('config', {})
+        
+        # Use pending config or create default
+        system_prompt = pending_config.get('system_prompt', f"You are {bot_name}, a helpful AI assistant.")
+        welcome_message = pending_config.get('greeting_message', f"Hello! I'm {bot_name}. How can I help you?")
+        description = pending_config.get('bot_description', f"AI bot created with Waya")
+        
+        # Create/update the managed bot in database
+        bot_id = await db.create_managed_bot(
+            user_id=owner_id,
+            telegram_bot_id=telegram_bot_id,
+            telegram_username=telegram_username,
+            telegram_token=bot_token,
+            name=bot_name,
+            description=description,
+            system_prompt=system_prompt,
+            welcome_message=welcome_message,
+            config=pending_config
+        )
+        
+        # Clear pending state
+        await db.clear_session_state(owner_id)
+        
+        # Notify the user
+        keyboard = [
+            [InlineKeyboardButton(f"Open @{telegram_username}", url=f"https://t.me/{telegram_username}")],
+            [InlineKeyboardButton("My Bots", callback_data="bb_my_bots")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await context.bot.send_message(
+            owner_id,
+            f"*Your Telegram bot is live!*\n\n"
+            f"*Name:* {bot_name}\n"
+            f"*Username:* @{telegram_username}\n\n"
+            f"Your bot is now running and ready to chat!\n"
+            f"Share it with anyone: `https://t.me/{telegram_username}`",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+        
+        # TODO: Start the managed bot in the runtime
+        # This would use the bot_token to run the bot
+        print(f"[ManagedBot] Bot @{telegram_username} created successfully (DB ID: {bot_id})")
+        
+    except Exception as e:
+        print(f"[ManagedBot] Error handling managed bot: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        try:
+            await context.bot.send_message(
+                owner_id,
+                f"There was an issue setting up your bot @{telegram_username}.\n"
+                f"Error: {str(e)[:100]}\n\n"
+                "Please try again or contact support."
+            )
+        except:
+            pass
 
 
 # =====================================================

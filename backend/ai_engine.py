@@ -1,40 +1,91 @@
 """
 Waya Bot Builder - AI Engine Module
-🏆 MAX POWER: Llama 4 + Whisper + COMPOUND (Agentic AI with tools)!
+Multi-provider AI: DigitalOcean Gradient, Groq, OpenAI-compatible
 """
 
 import os
 import json
+import httpx
 from typing import Optional, Dict, Any, List
-from groq import AsyncGroq
 from datetime import datetime
 
-# 🏆 BEST Groq Models - Use actual model names (not prefixed)
-BEST_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")  # Configurable via env
-FALLBACK_MODEL = "llama-3.1-8b-instant"  # Faster, cheaper fallback
-REASONING_MODEL = BEST_MODEL  # Use same model for reasoning
+# Try to import Groq, but make it optional
+try:
+    from groq import AsyncGroq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    AsyncGroq = None
 
-# 🎙 Whisper - FASTEST transcription
+# AI Provider configuration
+# Priority: DIGITALOCEAN > GROQ > OPENAI_COMPATIBLE
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "auto").lower()  # auto, digitalocean, groq, openai
+
+# DigitalOcean Gradient configuration
+DO_API_KEY = os.environ.get("DIGITALOCEAN_API_KEY") or os.environ.get("DO_API_KEY")
+DO_BASE_URL = "https://inference.do-ai.run/v1"
+DO_MODEL = os.environ.get("DO_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo")
+
+# Groq configuration
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+# OpenAI-compatible configuration (fallback)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+
+# Determine best available provider
+def get_ai_provider() -> str:
+    """Determine which AI provider to use based on available keys."""
+    if AI_PROVIDER != "auto":
+        return AI_PROVIDER
+    
+    # Auto-detect: prioritize DigitalOcean > Groq > OpenAI
+    if DO_API_KEY:
+        return "digitalocean"
+    if GROQ_API_KEY and GROQ_AVAILABLE:
+        return "groq"
+    if OPENAI_API_KEY:
+        return "openai"
+    
+    # Default to digitalocean if nothing is set (will fail gracefully)
+    return "digitalocean"
+
+# Model configuration based on provider
+def get_model_config() -> tuple[str, str, str]:
+    """Get (base_url, api_key, model) for current provider."""
+    provider = get_ai_provider()
+    
+    if provider == "digitalocean":
+        return (DO_BASE_URL, DO_API_KEY, DO_MODEL)
+    elif provider == "groq":
+        return (None, GROQ_API_KEY, GROQ_MODEL)  # Groq uses its own client
+    elif provider == "openai":
+        return (OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL)
+    else:
+        return (DO_BASE_URL, DO_API_KEY, DO_MODEL)
+
+# Legacy compatibility
+BEST_MODEL = GROQ_MODEL
+FALLBACK_MODEL = "llama-3.1-8b-instant"
+REASONING_MODEL = BEST_MODEL
+COMPOUND_MODEL = BEST_MODEL
+
+# Whisper model for voice
 WHISPER_MODEL = "whisper-large-v3-turbo"
 
-# 🤖 Fallback model for compound tasks
-COMPOUND_MODEL = BEST_MODEL  # Use main model as fallback
-
-# List of models to try in order if one fails
+# Fallback chain for Groq
 MODEL_FALLBACK_CHAIN = [
-    BEST_MODEL,
-    "llama-3.1-8b-instant",  # Fast fallback
-    "meta-llama/llama-4-scout-17b-16e-instruct",  # Llama 4 preview
+    GROQ_MODEL,
+    "llama-3.1-8b-instant",
 ]
 
 
 async def compound_response(user_message: str, conversation_history: list = None) -> str:
     """
-    🤖 COMPOUND - Agentic AI with tools!
-    Web search, code execution, visit websites autonomously!
+    Agentic AI with tools - uses universal chat completion.
     """
-    client = get_groq_client()
-    
     system_msg = """You are an advanced AI with tools:
 - Web search for current info
 - Code execution  
@@ -51,16 +102,14 @@ Be helpful, concise. Use tools when needed."""
     messages.append({"role": "user", "content": user_message})
     
     try:
-        response = await client.chat.completions.create(
-            model=COMPOUND_MODEL,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=2000
-        )
-        return response.choices[0].message.content
+        result = await chat_completion(messages, temperature=0.7, max_tokens=2000)
+        if result:
+            return result
     except Exception as e:
         print(f"Compound error: {e}")
-        return await generate_response(user_message, conversation_history)
+    
+    # Fallback to regular response
+    return await generate_response(user_message, conversation_history)
 
 
 # Initialize client
@@ -69,10 +118,13 @@ groq_client: Optional[AsyncGroq] = None
 
 async def transcribe_voice(audio_bytes: bytes, prompt: str = None) -> str:
     """
-    🎙 Transcribe voice using Groq Whisper - FASTEST!
-    Voice → Text in milliseconds!
+    Transcribe voice using Groq Whisper.
+    Note: Voice transcription requires Groq API key.
     """
     client = get_groq_client()
+    if not client:
+        print("[AI] Voice transcription unavailable - Groq not configured")
+        return None
     
     import io
     audio_file = io.BytesIO(audio_bytes)
@@ -100,10 +152,13 @@ async def transcribe_voice(audio_bytes: bytes, prompt: str = None) -> str:
 
 async def translate_audio(audio_bytes: bytes, target_language: str = "en") -> str:
     """
-    🌐 Translate audio to text in target language!
-    Uses Groq Whisper translation.
+    Translate audio to text in target language.
+    Note: Audio translation requires Groq API key.
     """
     client = get_groq_client()
+    if not client:
+        print("[AI] Audio translation unavailable - Groq not configured")
+        return None
     
     import io
     audio_file = io.BytesIO(audio_bytes)
@@ -123,56 +178,232 @@ async def translate_audio(audio_bytes: bytes, target_language: str = "en") -> st
         return None
 
 
-# Initialize Groq client
-groq_client: Optional[AsyncGroq] = None
+# Initialize clients
+groq_client: Optional[Any] = None
+http_client: Optional[httpx.AsyncClient] = None
 
 
-def get_groq_client() -> AsyncGroq:
-    """Get or create Groq client."""
+def get_groq_client():
+    """Get or create Groq client (only if Groq is available)."""
     global groq_client
+    if not GROQ_AVAILABLE:
+        return None
     if groq_client is None:
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
-            raise ValueError("GROQ_API_KEY environment variable is not set")
-        # Validate API key format (should start with gsk_)
-        if not api_key.startswith("gsk_"):
-            print(f"Warning: GROQ_API_KEY may be invalid - expected format starting with 'gsk_'")
+            return None
         groq_client = AsyncGroq(api_key=api_key)
     return groq_client
 
 
-def reset_groq_client():
-    """Reset the Groq client (useful if API key changes)."""
-    global groq_client
+def get_http_client() -> httpx.AsyncClient:
+    """Get or create HTTP client for OpenAI-compatible APIs."""
+    global http_client
+    if http_client is None:
+        http_client = httpx.AsyncClient(timeout=60.0)
+    return http_client
+
+
+def reset_clients():
+    """Reset all AI clients."""
+    global groq_client, http_client
     groq_client = None
+    http_client = None
 
 
-# Default system prompt for Waya
-WAYA_SYSTEM_PROMPT = """You are Waya, an intelligent and friendly Telegram bot assistant. You are helpful, knowledgeable, and always aim to provide the best assistance possible.
+async def chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float = 0.7,
+    max_tokens: int = 1500
+) -> Optional[str]:
+    """
+    Universal chat completion that works with any provider.
+    Tries providers in order: DigitalOcean > Groq > OpenAI
+    """
+    provider = get_ai_provider()
+    print(f"[AI] Using provider: {provider}")
+    
+    # Try DigitalOcean Gradient first
+    if provider == "digitalocean" and DO_API_KEY:
+        try:
+            result = await _do_chat_completion(messages, temperature, max_tokens)
+            if result:
+                return result
+        except Exception as e:
+            print(f"[AI] DigitalOcean failed: {e}")
+    
+    # Try Groq
+    if (provider == "groq" or provider == "digitalocean") and GROQ_API_KEY and GROQ_AVAILABLE:
+        try:
+            result = await _groq_chat_completion(messages, temperature, max_tokens)
+            if result:
+                return result
+        except Exception as e:
+            print(f"[AI] Groq failed: {e}")
+    
+    # Try OpenAI-compatible
+    if OPENAI_API_KEY:
+        try:
+            result = await _openai_chat_completion(messages, temperature, max_tokens)
+            if result:
+                return result
+        except Exception as e:
+            print(f"[AI] OpenAI failed: {e}")
+    
+    return None
 
-Key traits:
-- Friendly and approachable personality
-- Highly knowledgeable across many topics
-- Excellent at understanding context and user intent
-- Can help with tasks, answer questions, provide recommendations
-- Proactive in offering helpful suggestions
-- Remembers context from the conversation
 
-Current capabilities you can help users with:
-- Creating and managing reminders
-- Taking and organizing notes
-- Managing tasks and to-do lists
-- Building custom bots
-- Answering questions on any topic
-- Providing recommendations and suggestions
-- Analyzing and summarizing content
-- Language translation
-- Creative writing assistance
-- Coding help and explanations
-- And much more!
+async def _do_chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float,
+    max_tokens: int
+) -> Optional[str]:
+    """DigitalOcean Gradient chat completion."""
+    client = get_http_client()
+    
+    response = await client.post(
+        f"{DO_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {DO_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": DO_MODEL,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+    )
+    
+    if response.status_code == 200:
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+    else:
+        error_text = response.text
+        print(f"[AI] DigitalOcean error {response.status_code}: {error_text}")
+        raise Exception(f"DigitalOcean API error: {response.status_code}")
 
-Always be helpful, concise, and friendly. If you don't know something, admit it honestly.
-When users ask about bot building, guide them through the process step by step."""
+
+async def _groq_chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float,
+    max_tokens: int
+) -> Optional[str]:
+    """Groq chat completion."""
+    client = get_groq_client()
+    if not client:
+        return None
+    
+    # Try models in fallback chain
+    for model in MODEL_FALLBACK_CHAIN:
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"[AI] Groq model {model} failed: {e}")
+            continue
+    
+    return None
+
+
+async def _openai_chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float,
+    max_tokens: int
+) -> Optional[str]:
+    """OpenAI-compatible chat completion."""
+    client = get_http_client()
+    
+    response = await client.post(
+        f"{OPENAI_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": OPENAI_MODEL,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+    )
+    
+    if response.status_code == 200:
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+    else:
+        raise Exception(f"OpenAI API error: {response.status_code}")
+
+
+# Default system prompt for Waya - World-class AI Bot Platform
+WAYA_SYSTEM_PROMPT = """You are Waya, the world's most advanced AI-powered Telegram bot creation platform.
+
+## IDENTITY
+You are not just a chatbot - you are a complete bot creation studio that makes BotFather look like a typewriter. Users describe what they want in plain English, and you build production-ready bots in seconds.
+
+## CORE CAPABILITIES
+
+### BOT CREATION (Your Superpower)
+When someone describes a bot:
+1. Understand their vision instantly
+2. Generate a complete, working bot configuration  
+3. Create a REAL Telegram bot they can share with anyone
+4. No coding required - just describe and deploy
+
+Examples of bots you can create:
+- Customer support bots with FAQ, live chat escalation
+- E-commerce bots with product catalogs, carts, payments
+- Community bots with moderation, welcome messages, games
+- Personal assistant bots with scheduling, reminders, notes
+- Educational bots with quizzes, flashcards, progress tracking
+- Any custom bot the user can imagine
+
+### PRODUCTIVITY TOOLS
+- Reminders: Natural language scheduling ("remind me to call mom every Sunday at 2pm")
+- Notes: Save anything, search with AI, organize automatically
+- Tasks: Track todos with priorities, deadlines, and smart suggestions
+
+### AI ASSISTANT
+- Answer questions with current knowledge
+- Translate 100+ languages instantly  
+- Summarize documents, articles, conversations
+- Help with coding, writing, analysis, creative work
+- Voice message understanding with emotion detection
+
+## COMMUNICATION STYLE
+- Concise and direct - no fluff or corporate speak
+- Warm but efficient - respect the user's time
+- Match the user's energy level
+- Use bullet points and structure for clarity
+- Never say "I cannot" - find alternatives
+
+## BOT BUILDING FLOW
+When user wants a bot:
+1. If their description is clear: Generate the bot immediately
+2. If unclear: Ask ONE specific question to clarify
+3. Present the bot with: name, description, features, sample interactions
+4. Offer: "Create Real Bot" (shareable @username) or "Test Here First"
+
+## RESPONSE FORMAT
+- First line: Address the core request
+- Keep responses under 150 words unless detail is needed
+- Use formatting: *bold* for emphasis, `code` for commands
+- End with a clear next action when appropriate
+
+## AVAILABLE COMMANDS
+/build - Create a new bot
+/mybots - Your bot collection  
+/remind [text] - Set reminder
+/note [text] - Save note
+/task [text] - Create task
+/help - Command reference
+
+You represent the future of bot creation. Make every interaction feel like magic."""
 
 
 # Specialized prompts for different bot types
@@ -253,8 +484,7 @@ async def generate_response(
     emotion_context: Dict[str, Any] = None,
     empathic_mode: bool = False
 ) -> str:
-    """Generate an AI response using Groq with optional emotion awareness."""
-    client = get_groq_client()
+    """Generate an AI response using the best available provider."""
     
     # Build the system prompt with user context
     base_prompt = system_prompt or WAYA_SYSTEM_PROMPT
@@ -300,33 +530,15 @@ Respond in a {response_style} manner. Adapt your tone and language accordingly:
     # Add current message
     messages.append({"role": "user", "content": user_message})
     
-    # Try each model in the fallback chain
-    last_error = None
-    for model in MODEL_FALLBACK_CHAIN:
-        try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            last_error = e
-            error_str = str(e).lower()
-            # If it's an auth error, don't try other models - the key is invalid
-            if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "invalid" in error_str:
-                print(f"[AI] Auth error with Groq API: {e}")
-                break
-            # For other errors (rate limit, model not found), try next model
-            print(f"[AI] Model {model} failed: {e}, trying next...")
-            continue
+    # Use universal chat completion (tries all providers)
+    try:
+        result = await chat_completion(messages, temperature, max_tokens)
+        if result:
+            return result
+    except Exception as e:
+        print(f"[AI] All providers failed: {e}")
     
-    # All models failed
-    error_str = str(last_error).lower() if last_error else ""
-    if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
-        return "I'm having trouble connecting right now. Please try again in a moment."
-    return "I apologize, but I encountered an issue. Please try again."
+    return "I'm having trouble connecting right now. Please try again in a moment."
 
 
 async def generate_response_streaming(
@@ -339,10 +551,8 @@ async def generate_response_streaming(
 ):
     """
     Generate AI response with streaming support.
-    Yields chunks of text as they are generated.
+    Falls back to non-streaming if Groq is not available.
     """
-    client = get_groq_client()
-    
     # Build the system prompt
     base_prompt = system_prompt or WAYA_SYSTEM_PROMPT
     if user_name:
@@ -362,26 +572,34 @@ async def generate_response_streaming(
     
     messages.append({"role": "user", "content": user_message})
     
+    # Try Groq streaming first
+    client = get_groq_client()
+    if client:
+        try:
+            stream = await client.chat.completions.create(
+                model=BEST_MODEL,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True
+            )
+            
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+            return
+        except Exception as e:
+            print(f"[AI] Groq streaming failed: {e}")
+    
+    # Fall back to non-streaming chat_completion
     try:
-        # Use streaming
-        stream = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stream=True
-        )
-        
-        async for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-                
-    except Exception as e:
-        error_str = str(e).lower()
-        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
-            yield "I'm having trouble connecting right now. Please try again in a moment."
+        result = await chat_completion(messages, temperature, max_tokens)
+        if result:
+            yield result
         else:
-            yield "I apologize, but I encountered an issue. Please try again."
+            yield "I'm having trouble connecting right now. Please try again in a moment."
+    except Exception as e:
+        yield "I apologize, but I encountered an issue. Please try again."
 
 
 async def generate_empathic_response(
@@ -391,8 +609,6 @@ async def generate_empathic_response(
     emotion_intensity: str = "neutral"
 ) -> str:
     """Generate a deeply empathic response based on detected emotions."""
-    client = get_groq_client()
-    
     empathy_prompts = {
         "positive": f"""You are responding to {user_name} who is feeling {dominant_emotion}.
 They're in a positive emotional state. Match their energy - be warm, enthusiastic, and celebratory.
@@ -411,73 +627,86 @@ Be warm, helpful, and attentive. Adapt your tone based on what they need."""
     system_prompt = empathy_prompts.get(emotion_intensity, empathy_prompts["neutral"])
     system_prompt += "\n\nRespond naturally and authentically. Don't mention that you detected their emotions unless it feels natural."
     
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message}
+    ]
+    
+    temp = 0.7 if emotion_intensity == "neutral" else (0.5 if emotion_intensity == "negative" else 0.8)
+    
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=0.7 if emotion_intensity == "neutral" else (0.5 if emotion_intensity == "negative" else 0.8),
-            max_tokens=1024
-        )
-        return response.choices[0].message.content
+        result = await chat_completion(messages, temperature=temp, max_tokens=1024)
+        return result or "I'm here for you."
     except Exception as e:
-        return f"I'm here for you. {str(e)}"
+        return "I'm here for you."
 
 
 async def generate_bot_suggestion(user_request: str) -> Dict[str, Any]:
-    """Generate COMPLETE bot with code - fully autonomous AI builder."""
-    client = get_groq_client()
-    
-    # This is the key - AI writes actual code, not just config!
-    prompt = f"""You're an expert Telegram bot developer. Create a COMPLETE working bot based on user request.
+    """Generate COMPLETE bot configuration using AI - world-class quality."""
+    prompt = f"""You are a senior Telegram bot architect at a top tech company. Create an exceptional bot.
 
-User Request: {user_request}
+USER REQUEST: {user_request}
 
-Create a full bot configuration. Respond with JSON:
+Generate a production-ready bot configuration as JSON:
+
 {{
-    "bot_name": "ShortNameForBot",
-    "bot_description": "What this bot does (2 sentences max)",
-    "bot_type": "general", 
-    "system_prompt": "You are [bot name]. [description]. Be helpful, concise, and [personality traits].",
-    "greeting_message": "Hey! I'm [name]. [what I do]. How can I help you?",
-    "features": ["feature 1", "feature 2", "feature 3"],
-    "commands": [
-        {{"command": "/help", "description": "Get help"}},
-        {{"command": "/example", "description": "Example action"}}
+    "bot_name": "CreativeName",
+    "bot_username_suggestion": "creative_name_bot",
+    "bot_description": "Compelling 1-2 sentence description that makes users want to try it",
+    "bot_type": "category (support/assistant/community/education/ecommerce/entertainment/utility)",
+    "personality": {{
+        "tone": "friendly/professional/casual/playful/authoritative",
+        "traits": ["trait1", "trait2", "trait3"]
+    }},
+    "system_prompt": "Detailed personality and behavior instructions (be specific about how the bot should respond, its expertise, boundaries, and style)",
+    "greeting_message": "Engaging welcome that immediately shows value (max 2 sentences)",
+    "features": [
+        {{
+            "name": "Feature Name",
+            "description": "What it does",
+            "trigger": "How user activates it"
+        }}
     ],
-    "code_example": "Optional: if there's a specific function needed, show brief Python code here",
-    "response_templates": {{
-        "greeting": "Hey! I'm [name]. [what I do]. How can I help?",
-        "help": "Available commands: /help, /example",
-        "fallback": "I didn't get that. Try /help for options."
+    "commands": [
+        {{"command": "/start", "description": "Start the bot", "response": "Welcome message"}},
+        {{"command": "/help", "description": "Get help", "response": "Help text with all commands"}},
+        {{"command": "/custom", "description": "Relevant to bot purpose", "response": "Action response"}}
+    ],
+    "quick_replies": ["Suggested reply 1", "Suggested reply 2", "Suggested reply 3"],
+    "sample_conversations": [
+        {{"user": "Example question", "bot": "Example great response"}}
+    ],
+    "knowledge_areas": ["area1", "area2"],
+    "response_style": {{
+        "max_length": "concise/medium/detailed",
+        "use_emoji": true,
+        "formatting": "plain/markdown/structured"
     }}
 }}
 
-IMPORTANT:
-- Keep it SIMPLE - not too many features
-- Make it 3 features max
-- system_prompt should be natural and conversational
-- greeting should be short and friendly
+REQUIREMENTS:
+1. Bot name should be memorable and brandable (2-3 words max)
+2. System prompt must be detailed (100-300 words) defining personality, expertise, and response style
+3. Include 3-5 genuinely useful features relevant to the bot's purpose
+4. Commands should have real functionality, not just placeholders
+5. Quick replies should cover common user intents
+6. Sample conversation should demonstrate the bot's personality
+7. Make it feel like a product from Google, Apple, or OpenAI
 
-Respond ONLY with valid JSON."""
+Return ONLY valid JSON, no explanations."""
+
+    messages = [
+        {"role": "system", "content": "You are a world-class Telegram bot architect. You create bots that feel magical - intuitive, helpful, and delightful to use. Every bot you design could be a successful product. Output only valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
 
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert Telegram bot developer. Create simple, working bots. Be concise."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1500
-        )
+        result = await chat_completion(messages, temperature=0.7, max_tokens=1500)
+        if not result:
+            return _create_fallback_bot_config(user_request)
         
-        result = response.choices[0].message.content
         try:
             config = json.loads(result)
-            # Add the original request for reference
             config['user_original_request'] = user_request
             return config
         except json.JSONDecodeError:
@@ -487,34 +716,51 @@ Respond ONLY with valid JSON."""
                 config = json.loads(json_match.group())
                 config['user_original_request'] = user_request
                 return config
-            # Return a working fallback instead of error
             return _create_fallback_bot_config(user_request)
     except Exception as e:
-        error_str = str(e).lower()
-        # Check for API key/access issues
-        if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
-            # Return a working fallback bot config instead of failing
-            return _create_fallback_bot_config(user_request)
-        return {"error": "AI service temporarily unavailable. Please try again in a moment."}
+        return _create_fallback_bot_config(user_request)
 
 
 def _create_fallback_bot_config(user_request: str) -> Dict[str, Any]:
-    """Create a fallback bot configuration when AI generation fails."""
+    """Create a high-quality fallback bot configuration when AI generation fails."""
+    # Extract key words from request for personalization
+    request_lower = user_request.lower()
+    
+    # Determine bot type and customize
+    if any(w in request_lower for w in ['support', 'help', 'customer', 'service']):
+        bot_type, name, desc = "support", "Support Assistant", "Friendly customer support that resolves issues quickly"
+    elif any(w in request_lower for w in ['shop', 'store', 'buy', 'sell', 'product', 'order']):
+        bot_type, name, desc = "ecommerce", "Shop Assistant", "Your personal shopping helper for browsing and ordering"
+    elif any(w in request_lower for w in ['learn', 'teach', 'study', 'quiz', 'education']):
+        bot_type, name, desc = "education", "Study Buddy", "Learn anything with interactive lessons and quizzes"
+    elif any(w in request_lower for w in ['fitness', 'health', 'workout', 'diet', 'exercise']):
+        bot_type, name, desc = "health", "Wellness Coach", "Your personal health and fitness companion"
+    elif any(w in request_lower for w in ['fun', 'game', 'play', 'entertainment', 'joke']):
+        bot_type, name, desc = "entertainment", "Fun Bot", "Entertainment and games to brighten your day"
+    else:
+        bot_type, name, desc = "assistant", "Smart Assistant", "Your intelligent AI helper for any task"
+    
     return {
-        "bot_name": "Custom Bot",
-        "bot_description": f"A bot based on: {user_request[:80]}",
-        "bot_type": "general",
-        "system_prompt": f"You are a helpful assistant. {user_request[:150]}. Be friendly and concise.",
-        "greeting_message": "Hey! I'm your assistant. How can I help you?",
-        "features": ["AI Chat", "Commands", "Auto-reply"],
-        "commands": [
-            {"command": "/help", "description": "Get help"},
-            {"command": "/start", "description": "Start the bot"}
+        "bot_name": name,
+        "bot_username_suggestion": name.lower().replace(" ", "_") + "_bot",
+        "bot_description": desc,
+        "bot_type": bot_type,
+        "personality": {"tone": "friendly", "traits": ["helpful", "patient", "knowledgeable"]},
+        "system_prompt": f"You are {name}, an AI assistant. Your purpose: {user_request[:200]}. Be helpful, friendly, and concise. Always try to understand what the user needs and provide clear, actionable responses. If you don't know something, admit it and suggest alternatives.",
+        "greeting_message": f"Hey! I'm {name}. {desc}. How can I help you today?",
+        "features": [
+            {"name": "AI Chat", "description": "Natural conversation on any topic", "trigger": "Just send a message"},
+            {"name": "Quick Help", "description": "Get instant answers", "trigger": "/help"},
+            {"name": "Smart Responses", "description": "Context-aware replies", "trigger": "Automatic"}
         ],
-        "response_templates": {
-            "greeting": "Hey! How can I help?",
-            "help": "Send me a message and I'll assist you!",
-            "fallback": "I'm here to help. What do you need?"
+        "commands": [
+            {"command": "/start", "description": "Start the bot", "response": f"Welcome! I'm {name}. {desc}"},
+            {"command": "/help", "description": "Get help", "response": "Just send me a message and I'll help you out!"}
+        ],
+        "quick_replies": ["Tell me more", "Help me with...", "What can you do?"],
+        "sample_conversations": [{"user": "Hello", "bot": f"Hey there! I'm {name}. What can I help you with?"}],
+        "response_style": {"max_length": "concise", "use_emoji": True, "formatting": "markdown"},
+        "user_original_request": user_request
         },
         "user_original_request": user_request
     }
@@ -522,8 +768,6 @@ def _create_fallback_bot_config(user_request: str) -> Dict[str, Any]:
 
 async def analyze_message_intent(message: str) -> Dict[str, Any]:
     """Analyze the intent of a user message."""
-    client = get_groq_client()
-    
     prompt = f"""Analyze the following message and determine the user's intent.
 
 Message: {message}
@@ -541,18 +785,16 @@ Respond with a JSON object:
 
 Only respond with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a message intent analyzer. Respond only with valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a message intent analyzer. Respond only with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=512
-        )
+        result = await chat_completion(messages, temperature=0.3, max_tokens=512)
+        if not result:
+            return {"intent": "other", "sentiment": "neutral"}
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
@@ -567,8 +809,6 @@ Only respond with valid JSON."""
 
 async def parse_reminder_request(message: str) -> Dict[str, Any]:
     """Parse a reminder request from natural language."""
-    client = get_groq_client()
-    
     current_time = datetime.now()
     
     prompt = f"""Parse this reminder request and extract the details.
@@ -586,18 +826,16 @@ Respond with JSON:
 
 Only respond with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a datetime parsing expert. Respond only with valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a datetime parsing expert. Respond only with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=256
-        )
+        result = await chat_completion(messages, temperature=0.2, max_tokens=256)
+        if not result:
+            return {"error": "AI service unavailable"}
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
@@ -612,8 +850,6 @@ Only respond with valid JSON."""
 
 async def parse_task_request(message: str) -> Dict[str, Any]:
     """Parse a task creation request from natural language."""
-    client = get_groq_client()
-    
     prompt = f"""Parse this task request and extract the details.
 
 Message: {message}
@@ -630,18 +866,16 @@ Respond with JSON:
 Priority must be one of: low, normal, high, urgent. Default to "normal" if not specified.
 Only respond with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a task parsing expert. Respond only with valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a task parsing expert. Respond only with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=256
-        )
+        result = await chat_completion(messages, temperature=0.2, max_tokens=256)
+        if not result:
+            return {"error": "AI service unavailable"}
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
@@ -656,46 +890,34 @@ Only respond with valid JSON."""
 
 async def summarize_text(text: str, max_length: int = 200) -> str:
     """Summarize a piece of text."""
-    client = get_groq_client()
+    messages = [
+        {"role": "system", "content": f"Summarize the following text in {max_length} words or less. Be concise and capture the key points."},
+        {"role": "user", "content": text}
+    ]
     
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": f"Summarize the following text in {max_length} words or less. Be concise and capture the key points."},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.3,
-            max_tokens=max_length * 2
-        )
-        return response.choices[0].message.content
+        result = await chat_completion(messages, temperature=0.3, max_tokens=max_length * 2)
+        return result or "Could not summarize the text."
     except Exception as e:
         return f"Error summarizing: {str(e)}"
 
 
 async def translate_text(text: str, target_language: str) -> str:
     """Translate text to a target language."""
-    client = get_groq_client()
+    messages = [
+        {"role": "system", "content": f"Translate the following text to {target_language}. Provide only the translation, no explanations."},
+        {"role": "user", "content": text}
+    ]
     
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": f"Translate the following text to {target_language}. Provide only the translation, no explanations."},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.2,
-            max_tokens=1024
-        )
-        return response.choices[0].message.content
+        result = await chat_completion(messages, temperature=0.2, max_tokens=1024)
+        return result or "Could not translate the text."
     except Exception as e:
         return f"Error translating: {str(e)}"
 
 
 async def generate_quiz_question(topic: str, difficulty: str = "medium") -> Dict[str, Any]:
     """Generate a quiz question on a topic."""
-    client = get_groq_client()
-    
     prompt = f"""Generate a {difficulty} difficulty quiz question about: {topic}
 
 Respond with JSON:
@@ -708,18 +930,16 @@ Respond with JSON:
 
 Only respond with valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a quiz question generator. Respond only with valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a quiz question generator. Respond only with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.8,
-            max_tokens=512
-        )
+        result = await chat_completion(messages, temperature=0.8, max_tokens=512)
+        if not result:
+            return {"error": "AI service unavailable"}
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:
@@ -734,8 +954,6 @@ Only respond with valid JSON."""
 
 async def get_smart_suggestions(user_context: Dict[str, Any]) -> List[str]:
     """Generate smart suggestions based on user context."""
-    client = get_groq_client()
-    
     context_str = json.dumps(user_context, indent=2)
     
     prompt = f"""Based on the following user context, suggest 3-5 helpful actions or things the user might want to do next.
@@ -748,18 +966,16 @@ Respond with a JSON array of suggestion strings:
 
 Only respond with valid JSON array."""
 
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant suggesting next actions. Respond only with a JSON array."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant suggesting next actions. Respond only with a JSON array."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=256
-        )
+        result = await chat_completion(messages, temperature=0.7, max_tokens=256)
+        if not result:
+            return ["Check your tasks", "Set a reminder", "Create a note"]
         
-        result = response.choices[0].message.content
         try:
             return json.loads(result)
         except json.JSONDecodeError:

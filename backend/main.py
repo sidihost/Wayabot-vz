@@ -47,6 +47,7 @@ from telegram.ext import (
     CommandHandler, 
     MessageHandler, 
     CallbackQueryHandler,
+    TypeHandler,
     filters
 )
 
@@ -79,7 +80,9 @@ from handlers import (
     # Emotion AI (Hume)
     mood_command, emotions_command, empathy_command, wellbeing_command, analyze_voice_emotion,
     handle_message, handle_voice_message, handle_audio_message, handle_photo_message,
-    handle_callback, error_handler
+    handle_callback, error_handler,
+    # Managed Bots (Telegram Bot API 9.6)
+    handle_managed_bot_update
 )
 
 
@@ -187,6 +190,9 @@ async def setup_telegram_app() -> Application:
     # Callback handler for inline keyboards
     app.add_handler(CallbackQueryHandler(handle_callback))
     
+    # Managed bot handler (Telegram Bot API 9.6 - for creating real bots)
+    app.add_handler(TypeHandler(Update, handle_managed_bot_update), group=1)
+    
     # Error handler
     app.add_error_handler(error_handler)
     
@@ -229,7 +235,7 @@ async def lifespan(app: fastapi.FastAPI):
                 webhook_url = f"https://{bot_domain}/webhook"
                 result = await telegram_app.bot.set_webhook(
                     url=webhook_url,
-                    allowed_updates=["message", "callback_query", "poll", "poll_answer"]
+                    allowed_updates=["message", "callback_query", "poll", "poll_answer", "managed_bot"]
                 )
                 if result:
                     print(f"✅ Webhook auto-configured: {webhook_url}")
@@ -348,19 +354,20 @@ async def health():
     except:
         pass
     
-    # Check Groq AI status
+    # Check AI status (tries all providers)
     ai_healthy = False
+    ai_provider = "unknown"
     ai_error = None
     try:
-        from ai_engine import get_groq_client, BEST_MODEL
-        client = get_groq_client()
+        from ai_engine import chat_completion, get_ai_provider
+        ai_provider = get_ai_provider()
         # Quick test with minimal tokens
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
+        result = await chat_completion(
             messages=[{"role": "user", "content": "Hi"}],
             max_tokens=5
         )
-        ai_healthy = True
+        if result:
+            ai_healthy = True
     except Exception as e:
         ai_error = str(e)
     
@@ -374,7 +381,7 @@ async def health():
         "components": {
             "database": "healthy" if db_healthy else "unhealthy",
             "telegram": "connected" if telegram_app else "disconnected",
-            "ai_groq": "healthy" if ai_healthy else f"unhealthy: {ai_error}",
+            "ai": f"healthy ({ai_provider})" if ai_healthy else f"unhealthy ({ai_provider}): {ai_error}",
             "scheduler": "running" if scheduler and scheduler._running else "stopped",
             "bot_runtime": "running" if runtime_running else "stopped"
         },

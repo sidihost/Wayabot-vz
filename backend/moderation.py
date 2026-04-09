@@ -15,7 +15,7 @@ from enum import Enum
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
-from ai_engine import get_groq_client, BEST_MODEL
+from ai_engine import get_groq_client, chat_completion, BEST_MODEL
 from telegram_api import TelegramAPI, get_telegram_api, ChatPermissions
 from database import get_connection
 
@@ -242,8 +242,6 @@ async def analyze_content_ai(
     Returns:
         ModerationResult with analysis
     """
-    client = get_groq_client()
-    
     system_prompt = """You are a content moderator. Analyze the message and return a JSON object:
 {
     "is_violation": true/false,
@@ -260,18 +258,20 @@ Be fair but thorough. Consider context if provided. Return ONLY valid JSON."""
     if context:
         user_prompt += f"\n\nContext: {context}"
     
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+    
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.2,
-            max_tokens=200
-        )
+        result_text = await chat_completion(messages, temperature=0.2, max_tokens=200)
+        if not result_text:
+            return ModerationResult(
+                is_violation=False, violation_type=None, confidence=0.0,
+                reason="AI unavailable", recommended_action=ModerationAction.IGNORE
+            )
         
-        result_text = response.choices[0].message.content.strip()
+        result_text = result_text.strip()
         
         # Handle code blocks
         if "```json" in result_text:

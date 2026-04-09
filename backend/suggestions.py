@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from ai_engine import get_groq_client, BEST_MODEL
+from ai_engine import get_groq_client, chat_completion, BEST_MODEL
 from telegram_api import TelegramAPI, get_telegram_api
 from database import get_connection
 
@@ -143,8 +143,6 @@ async def generate_suggestions_ai(
     Returns:
         SuggestionResult with suggestions
     """
-    client = get_groq_client()
-    
     persona_context = ""
     if bot_persona:
         persona_context = f"\nYou are a {bot_persona}."
@@ -181,18 +179,17 @@ Return ONLY valid JSON."""
     if context_text:
         user_prompt += f"\n{context_text}"
     
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+    
     try:
-        response = await client.chat.completions.create(
-            model=BEST_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            max_tokens=400
-        )
+        result_text = await chat_completion(messages, temperature=0.7, max_tokens=400)
+        if not result_text:
+            return await generate_quick_suggestions(message_text, count)
         
-        result_text = response.choices[0].message.content.strip()
+        result_text = result_text.strip()
         
         # Handle code blocks
         if "```json" in result_text:
