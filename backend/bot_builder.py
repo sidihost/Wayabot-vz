@@ -610,36 +610,54 @@ async def create_channel_bot_config(
 
 async def generate_bot_config_with_ai(description: str, user_name: str = "User") -> Dict[str, Any]:
     """
-    Use AI to generate a complete bot configuration from a description.
-    Uses the universal chat_completion function that supports multiple providers.
+    Use AI to generate a world-class bot configuration from a description.
+    Creates bots that feel like they were built by Google or OpenAI.
     """
-    prompt = f"""Create a Telegram bot based on this description: "{description}"
+    prompt = f"""You are a senior product designer at a top tech company. Create an exceptional Telegram bot.
 
-Generate a JSON configuration with these fields:
+USER WANTS: "{description}"
+
+Design a bot that users will LOVE. Generate JSON:
+
 {{
-    "bot_name": "Creative name (2-3 words)",
-    "bot_description": "One sentence description (max 100 chars)",
-    "greeting_message": "Welcome message for users (friendly, max 200 chars)",
-    "system_prompt": "Detailed personality and behavior instructions (200-500 chars)",
-    "features": ["list of 3-5 relevant features from: ai_chat, commands, auto_reply, inline_mode, polls, buttons, channel_post, scheduler, knowledge_base, forms, broadcast, business, analytics, voice, multilingual, deep_linking, payments, games"],
+    "bot_name": "Memorable brand name (2-3 words, sounds like a real product)",
+    "bot_username_suggestion": "snake_case_bot_name",
+    "bot_description": "Compelling pitch that makes users want to try it (1-2 sentences)",
+    "tagline": "Short catchy tagline (3-6 words)",
+    "greeting_message": "Warm, engaging welcome that immediately shows value and invites interaction",
+    "system_prompt": "DETAILED instructions for the AI (150-300 words): personality traits, expertise areas, response style, things to always/never do, how to handle edge cases, example phrases to use",
+    "personality": {{
+        "tone": "friendly/professional/playful/authoritative/warm",
+        "traits": ["trait1", "trait2", "trait3"],
+        "communication_style": "concise/detailed/conversational/structured"
+    }},
+    "features": [
+        {{"name": "Feature Name", "description": "What it does and why it's useful", "how_to_use": "How users activate it"}}
+    ],
     "commands": [
-        {{"command": "start", "description": "Start the bot", "response": "Welcome message"}},
-        {{"command": "help", "description": "Get help", "response": "Help text"}}
+        {{"command": "/start", "description": "Begin", "response": "Engaging welcome"}},
+        {{"command": "/help", "description": "Help", "response": "Clear guide"}},
+        {{"command": "/[relevant]", "description": "Bot-specific action", "response": "Useful response"}}
     ],
-    "auto_replies": [
-        {{"trigger": "keyword", "response": "Auto response"}}
+    "quick_replies": ["Contextual suggestion 1", "Contextual suggestion 2", "Contextual suggestion 3"],
+    "sample_conversations": [
+        {{"user": "Realistic user message", "bot": "Perfect bot response demonstrating personality"}}
     ],
-    "sample_qa": [
-        {{"question": "Common question?", "answer": "Helpful answer"}}
-    ],
-    "tone": "friendly/professional/casual/formal",
-    "category": "business/community/education/productivity/entertainment/ecommerce"
+    "tone": "friendly/professional/casual/playful",
+    "category": "support/assistant/community/education/ecommerce/entertainment/utility/productivity"
 }}
 
-Make it creative, useful, and production-ready. Return ONLY valid JSON."""
+QUALITY STANDARDS:
+1. Bot name should be brandable (think: Alexa, Siri, Copilot level)
+2. System prompt must be comprehensive - this defines the bot's soul
+3. Features should solve real problems, not be generic
+4. Sample conversation should showcase the bot's unique personality
+5. Everything should feel polished and professional
+
+Return ONLY valid JSON."""
 
     messages = [
-        {"role": "system", "content": "You are a Telegram bot architect. Create detailed, production-ready bot configurations. Return only valid JSON."},
+        {"role": "system", "content": "You are a world-class bot designer who creates products that feel magical. Your bots are so good they could be featured in the App Store. Output only valid JSON, no markdown."},
         {"role": "user", "content": prompt}
     ]
 

@@ -384,57 +384,37 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     is_new = user_data.get("is_new", False)
     
     if is_new:
-        welcome_message = f"""
-*Welcome to Waya, {name}!*
+        welcome_message = f"""*Hey {name}!* Welcome to Waya.
 
-I'm your powerful bot builder and AI assistant!
+I'm the most powerful bot builder on Telegram. Describe any bot you can imagine, and I'll create it in seconds.
 
-*Quick Start:*
+*What I can do:*
 
-*Bot Building*
-- `/build` - Create AI bots with natural language
-- `/templates` - 20+ pre-built templates
-- `/mybots` - Manage your creations
+*Create Bots* - Just describe what you want
+"Make a customer support bot for my restaurant"
+"Build a quiz bot about space"
+"I need a fitness coach bot"
 
-*Business & Channels*
-- Business bots for Telegram Business
-- Channel bots for content scheduling
-- Polls & quizzes for engagement
+*Productivity* - All with natural language
+"Remind me to call mom tomorrow at 3pm"
+"Note: meeting notes from today..."
+"Task: finish the report by Friday"
 
-*Productivity*
-- `/remind` - Smart reminders
-- `/note` - Quick notes
-- `/task` - Task tracking
+*AI Assistant* - Ask me anything
+Questions, translations, summaries, coding help
 
-*AI Features*
-- Chat naturally with me
-- `/translate` - Any language
-- `/quiz` - Test your knowledge
-
-*Progress*
-- `/profile` - Your stats
-- `/leaderboard` - Top users
-
-*Type /help for all commands!*
-
-What would you like to do first? 👇
-"""
+Ready to create something amazing?"""
     else:
-        welcome_message = f"""
-👋 *Welcome back, {name}!*
+        welcome_message = f"""*Hey {name}!*
 
-Great to see you again! How can I help you today?
-
-Quick actions below or just tell me what you need!
-"""
+What would you like to do?"""
     
     keyboard = [
-        [InlineKeyboardButton("📝 Set Reminder", callback_data="quick_reminder"),
-         InlineKeyboardButton("📋 Add Task", callback_data="quick_task")],
-        [InlineKeyboardButton("🤖 Build a Bot", callback_data="build_bot"),
-         InlineKeyboardButton("📄 Create Note", callback_data="quick_note")],
-        [InlineKeyboardButton("�� Chat with AI", callback_data="start_chat"),
-         InlineKeyboardButton("📊 My Profile", callback_data="show_profile")]
+        [InlineKeyboardButton("Create a Bot", callback_data="build_bot")],
+        [InlineKeyboardButton("Set Reminder", callback_data="quick_reminder"),
+         InlineKeyboardButton("Add Task", callback_data="quick_task")],
+        [InlineKeyboardButton("My Bots", callback_data="menu_mybots"),
+         InlineKeyboardButton("Just Chat", callback_data="start_chat")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -1096,25 +1076,23 @@ async def del_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Build a bot INSTANTLY - one step, no clicking!
-    User says what they want → bot creates it automatically.
+    Build a bot INSTANTLY - describe what you want, get a working bot.
+    This is the magic that makes Waya better than BotFather.
     """
     await ensure_user(update)
     user_id = update.effective_user.id
     name = get_user_display_name(update)
     
-    # What does user want?
+    # If no description provided, show a clean prompt
     if not context.args:
         await update.message.reply_text(
-            f"🤖 *Instant Bot Builder*\n\n"
-            f"✨ **Premium Features:**\n"
-            f"• AI-powered instant creation\n"
-            f"• Smart context understanding\n"
-            f"• Voice-ready responses\n\n"
-            f"Tell me what you want:\n"
-            f"`I need a coffee shop bot`\n"
-            f"`create a fitness coach`\n\n"
-            f"I'll create it instantly! ⚡",
+            "*Describe your bot*\n\n"
+            "Just tell me what you want in plain English:\n\n"
+            "`/build a customer support bot for my bakery`\n"
+            "`/build fitness coach that gives daily workouts`\n"
+            "`/build trivia game about movies`\n"
+            "`/build language tutor for Spanish learners`\n\n"
+            "I'll create a complete, working bot in seconds.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -1122,24 +1100,22 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Get user request
     user_request = " ".join(context.args)
     
-    # PREMIUM TYPING SEQUENCE - show the magic!
+    # Clean, professional loading sequence
     await update.message.chat.send_action(ChatAction.TYPING)
-    loading_msg = await update.message.reply_text("🎨 *Analyzing your request...*")
-    await asyncio.sleep(0.8)
+    loading_msg = await update.message.reply_text("*Understanding your vision...*", parse_mode=ParseMode.MARKDOWN)
     
-    await update.message.chat.send_action(ChatAction.TYPING)
-    await loading_msg.edit_text("🧠 *Designing your bot...*")
-    await asyncio.sleep(0.8)
-    
-    # AI creates
+    # AI creates the bot
     await update.message.chat.send_action(ChatAction.TYPING)
     config = await generate_bot_suggestion(user_request)
     
-    await loading_msg.edit_text("⚙️ *Building...*")
-    await asyncio.sleep(0.5)
+    await loading_msg.edit_text("*Building your bot...*", parse_mode=ParseMode.MARKDOWN)
     
     if "error" in config:
-        await loading_msg.edit_text(f"❌ Oops! {config.get('error', 'Something went wrong')}")
+        await loading_msg.edit_text(
+            "Something went wrong. Let me try a simpler approach.\n\n"
+            "Try being more specific: `/build customer support bot for a pizza restaurant`",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return
     
     # Create bot in database
@@ -1154,7 +1130,7 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         commands=config.get('commands')
     )
     
-    # Make it active!
+    # Make it active
     await db.set_active_bot(user_id, bot_id)
     await db.add_xp(user_id, 30)
     
@@ -1163,46 +1139,47 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         bot_info = await context.bot.get_me()
         bot_username = bot_info.username
     except:
-        bot_username = "WayaBotBuilder_bot"  # Fallback
+        bot_username = "WayaBotBuilder_bot"
     
     # Create shareable deep link
     share_link = f"https://t.me/{bot_username}?start=bot_{bot_id}"
     
-    # SUCCESS with shareable link!
+    # Extract bot details
     bot_name = config.get('bot_name', 'Bot')
-    desc = config.get('bot_description', '')[:100]
-    features = config.get('features', [])[:3]
-    greeting = config.get('greeting_message', f"Hey! I'm {bot_name}. How can I help?")
+    desc = config.get('bot_description', '')
+    features = config.get('features', [])
+    greeting = config.get('greeting_message', f"Hey! I'm {bot_name}.")
+    
+    # Format features nicely
+    if features:
+        if isinstance(features[0], dict):
+            feature_list = "\n".join([f"  {f.get('name', f)}" for f in features[:3]])
+        else:
+            feature_list = "\n".join([f"  {f}" for f in features[:3]])
+    else:
+        feature_list = "  AI-powered responses\n  Context memory\n  Instant replies"
     
     keyboard = [
         [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
-        [InlineKeyboardButton("Share Bot", url=share_link)],
-        [InlineKeyboardButton("My Bots", callback_data="menu_mybots")]
+        [InlineKeyboardButton("Share This Bot", url=share_link)],
+        [InlineKeyboardButton("View All My Bots", callback_data="menu_mybots")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await loading_msg.edit_text(
-        f"Your AI Bot is Ready!\n\n"
-        f"*{bot_name}*\n"
+        f"*{bot_name}* is ready!\n\n"
         f"{desc}\n\n"
-        f"*Features:*\n"
-        f"- {features[0] if len(features) > 0 else 'Smart responses'}\n"
-        f"- {features[1] if len(features) > 1 else 'Context memory'}\n"
-        f"- {features[2] if len(features) > 2 else 'Instant replies'}\n\n"
-        f"*Share your bot:*\n"
-        f"`{share_link}`\n\n"
-        f"Just send a message to start chatting with your new AI!",
+        f"*What it can do:*\n{feature_list}\n\n"
+        f"*Share link:* `{share_link}`\n\n"
+        f"Send a message to start chatting.",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=reply_markup
     )
     
-    # Send the greeting as first message from the bot
-    await asyncio.sleep(0.5)
+    # Bot introduces itself
+    await asyncio.sleep(0.3)
     clean_greeting = clean_markdown_for_telegram(greeting)
-    await update.message.reply_text(
-        f"*{bot_name}:* {clean_greeting}",
-        parse_mode=ParseMode.MARKDOWN
-    )
+    await update.message.reply_text(f"_{clean_greeting}_", parse_mode=ParseMode.MARKDOWN)
 
 
 async def templates_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

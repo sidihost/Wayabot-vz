@@ -340,32 +340,70 @@ async def _openai_chat_completion(
         raise Exception(f"OpenAI API error: {response.status_code}")
 
 
-# Default system prompt for Waya
-WAYA_SYSTEM_PROMPT = """You are Waya, an intelligent and friendly Telegram bot assistant. You are helpful, knowledgeable, and always aim to provide the best assistance possible.
+# Default system prompt for Waya - World-class AI Bot Platform
+WAYA_SYSTEM_PROMPT = """You are Waya, the world's most advanced AI-powered Telegram bot creation platform.
 
-Key traits:
-- Friendly and approachable personality
-- Highly knowledgeable across many topics
-- Excellent at understanding context and user intent
-- Can help with tasks, answer questions, provide recommendations
-- Proactive in offering helpful suggestions
-- Remembers context from the conversation
+## IDENTITY
+You are not just a chatbot - you are a complete bot creation studio that makes BotFather look like a typewriter. Users describe what they want in plain English, and you build production-ready bots in seconds.
 
-Current capabilities you can help users with:
-- Creating and managing reminders
-- Taking and organizing notes
-- Managing tasks and to-do lists
-- Building custom bots
-- Answering questions on any topic
-- Providing recommendations and suggestions
-- Analyzing and summarizing content
-- Language translation
-- Creative writing assistance
-- Coding help and explanations
-- And much more!
+## CORE CAPABILITIES
 
-Always be helpful, concise, and friendly. If you don't know something, admit it honestly.
-When users ask about bot building, guide them through the process step by step."""
+### BOT CREATION (Your Superpower)
+When someone describes a bot:
+1. Understand their vision instantly
+2. Generate a complete, working bot configuration  
+3. Create a REAL Telegram bot they can share with anyone
+4. No coding required - just describe and deploy
+
+Examples of bots you can create:
+- Customer support bots with FAQ, live chat escalation
+- E-commerce bots with product catalogs, carts, payments
+- Community bots with moderation, welcome messages, games
+- Personal assistant bots with scheduling, reminders, notes
+- Educational bots with quizzes, flashcards, progress tracking
+- Any custom bot the user can imagine
+
+### PRODUCTIVITY TOOLS
+- Reminders: Natural language scheduling ("remind me to call mom every Sunday at 2pm")
+- Notes: Save anything, search with AI, organize automatically
+- Tasks: Track todos with priorities, deadlines, and smart suggestions
+
+### AI ASSISTANT
+- Answer questions with current knowledge
+- Translate 100+ languages instantly  
+- Summarize documents, articles, conversations
+- Help with coding, writing, analysis, creative work
+- Voice message understanding with emotion detection
+
+## COMMUNICATION STYLE
+- Concise and direct - no fluff or corporate speak
+- Warm but efficient - respect the user's time
+- Match the user's energy level
+- Use bullet points and structure for clarity
+- Never say "I cannot" - find alternatives
+
+## BOT BUILDING FLOW
+When user wants a bot:
+1. If their description is clear: Generate the bot immediately
+2. If unclear: Ask ONE specific question to clarify
+3. Present the bot with: name, description, features, sample interactions
+4. Offer: "Create Real Bot" (shareable @username) or "Test Here First"
+
+## RESPONSE FORMAT
+- First line: Address the core request
+- Keep responses under 150 words unless detail is needed
+- Use formatting: *bold* for emphasis, `code` for commands
+- End with a clear next action when appropriate
+
+## AVAILABLE COMMANDS
+/build - Create a new bot
+/mybots - Your bot collection  
+/remind [text] - Set reminder
+/note [text] - Save note
+/task [text] - Create task
+/help - Command reference
+
+You represent the future of bot creation. Make every interaction feel like magic."""
 
 
 # Specialized prompts for different bot types
@@ -604,40 +642,61 @@ Be warm, helpful, and attentive. Adapt your tone based on what they need."""
 
 
 async def generate_bot_suggestion(user_request: str) -> Dict[str, Any]:
-    """Generate COMPLETE bot configuration using AI."""
-    prompt = f"""You're an expert Telegram bot developer. Create a COMPLETE working bot based on user request.
+    """Generate COMPLETE bot configuration using AI - world-class quality."""
+    prompt = f"""You are a senior Telegram bot architect at a top tech company. Create an exceptional bot.
 
-User Request: {user_request}
+USER REQUEST: {user_request}
 
-Create a full bot configuration. Respond with JSON:
+Generate a production-ready bot configuration as JSON:
+
 {{
-    "bot_name": "ShortNameForBot",
-    "bot_description": "What this bot does (2 sentences max)",
-    "bot_type": "general", 
-    "system_prompt": "You are [bot name]. [description]. Be helpful, concise, and [personality traits].",
-    "greeting_message": "Hey! I'm [name]. [what I do]. How can I help you?",
-    "features": ["feature 1", "feature 2", "feature 3"],
-    "commands": [
-        {{"command": "/help", "description": "Get help"}},
-        {{"command": "/example", "description": "Example action"}}
+    "bot_name": "CreativeName",
+    "bot_username_suggestion": "creative_name_bot",
+    "bot_description": "Compelling 1-2 sentence description that makes users want to try it",
+    "bot_type": "category (support/assistant/community/education/ecommerce/entertainment/utility)",
+    "personality": {{
+        "tone": "friendly/professional/casual/playful/authoritative",
+        "traits": ["trait1", "trait2", "trait3"]
+    }},
+    "system_prompt": "Detailed personality and behavior instructions (be specific about how the bot should respond, its expertise, boundaries, and style)",
+    "greeting_message": "Engaging welcome that immediately shows value (max 2 sentences)",
+    "features": [
+        {{
+            "name": "Feature Name",
+            "description": "What it does",
+            "trigger": "How user activates it"
+        }}
     ],
-    "response_templates": {{
-        "greeting": "Hey! I'm [name]. [what I do]. How can I help?",
-        "help": "Available commands: /help, /example",
-        "fallback": "I didn't get that. Try /help for options."
+    "commands": [
+        {{"command": "/start", "description": "Start the bot", "response": "Welcome message"}},
+        {{"command": "/help", "description": "Get help", "response": "Help text with all commands"}},
+        {{"command": "/custom", "description": "Relevant to bot purpose", "response": "Action response"}}
+    ],
+    "quick_replies": ["Suggested reply 1", "Suggested reply 2", "Suggested reply 3"],
+    "sample_conversations": [
+        {{"user": "Example question", "bot": "Example great response"}}
+    ],
+    "knowledge_areas": ["area1", "area2"],
+    "response_style": {{
+        "max_length": "concise/medium/detailed",
+        "use_emoji": true,
+        "formatting": "plain/markdown/structured"
     }}
 }}
 
-IMPORTANT:
-- Keep it SIMPLE - not too many features
-- Make it 3 features max
-- system_prompt should be natural and conversational
-- greeting should be short and friendly
+REQUIREMENTS:
+1. Bot name should be memorable and brandable (2-3 words max)
+2. System prompt must be detailed (100-300 words) defining personality, expertise, and response style
+3. Include 3-5 genuinely useful features relevant to the bot's purpose
+4. Commands should have real functionality, not just placeholders
+5. Quick replies should cover common user intents
+6. Sample conversation should demonstrate the bot's personality
+7. Make it feel like a product from Google, Apple, or OpenAI
 
-Respond ONLY with valid JSON."""
+Return ONLY valid JSON, no explanations."""
 
     messages = [
-        {"role": "system", "content": "You are an expert Telegram bot developer. Create simple, working bots. Be concise."},
+        {"role": "system", "content": "You are a world-class Telegram bot architect. You create bots that feel magical - intuitive, helpful, and delightful to use. Every bot you design could be a successful product. Output only valid JSON."},
         {"role": "user", "content": prompt}
     ]
 
@@ -663,22 +722,45 @@ Respond ONLY with valid JSON."""
 
 
 def _create_fallback_bot_config(user_request: str) -> Dict[str, Any]:
-    """Create a fallback bot configuration when AI generation fails."""
+    """Create a high-quality fallback bot configuration when AI generation fails."""
+    # Extract key words from request for personalization
+    request_lower = user_request.lower()
+    
+    # Determine bot type and customize
+    if any(w in request_lower for w in ['support', 'help', 'customer', 'service']):
+        bot_type, name, desc = "support", "Support Assistant", "Friendly customer support that resolves issues quickly"
+    elif any(w in request_lower for w in ['shop', 'store', 'buy', 'sell', 'product', 'order']):
+        bot_type, name, desc = "ecommerce", "Shop Assistant", "Your personal shopping helper for browsing and ordering"
+    elif any(w in request_lower for w in ['learn', 'teach', 'study', 'quiz', 'education']):
+        bot_type, name, desc = "education", "Study Buddy", "Learn anything with interactive lessons and quizzes"
+    elif any(w in request_lower for w in ['fitness', 'health', 'workout', 'diet', 'exercise']):
+        bot_type, name, desc = "health", "Wellness Coach", "Your personal health and fitness companion"
+    elif any(w in request_lower for w in ['fun', 'game', 'play', 'entertainment', 'joke']):
+        bot_type, name, desc = "entertainment", "Fun Bot", "Entertainment and games to brighten your day"
+    else:
+        bot_type, name, desc = "assistant", "Smart Assistant", "Your intelligent AI helper for any task"
+    
     return {
-        "bot_name": "Custom Bot",
-        "bot_description": f"A bot based on: {user_request[:80]}",
-        "bot_type": "general",
-        "system_prompt": f"You are a helpful assistant. {user_request[:150]}. Be friendly and concise.",
-        "greeting_message": "Hey! I'm your assistant. How can I help you?",
-        "features": ["AI Chat", "Commands", "Auto-reply"],
-        "commands": [
-            {"command": "/help", "description": "Get help"},
-            {"command": "/start", "description": "Start the bot"}
+        "bot_name": name,
+        "bot_username_suggestion": name.lower().replace(" ", "_") + "_bot",
+        "bot_description": desc,
+        "bot_type": bot_type,
+        "personality": {"tone": "friendly", "traits": ["helpful", "patient", "knowledgeable"]},
+        "system_prompt": f"You are {name}, an AI assistant. Your purpose: {user_request[:200]}. Be helpful, friendly, and concise. Always try to understand what the user needs and provide clear, actionable responses. If you don't know something, admit it and suggest alternatives.",
+        "greeting_message": f"Hey! I'm {name}. {desc}. How can I help you today?",
+        "features": [
+            {"name": "AI Chat", "description": "Natural conversation on any topic", "trigger": "Just send a message"},
+            {"name": "Quick Help", "description": "Get instant answers", "trigger": "/help"},
+            {"name": "Smart Responses", "description": "Context-aware replies", "trigger": "Automatic"}
         ],
-        "response_templates": {
-            "greeting": "Hey! How can I help?",
-            "help": "Send me a message and I'll assist you!",
-            "fallback": "I'm here to help. What do you need?"
+        "commands": [
+            {"command": "/start", "description": "Start the bot", "response": f"Welcome! I'm {name}. {desc}"},
+            {"command": "/help", "description": "Get help", "response": "Just send me a message and I'll help you out!"}
+        ],
+        "quick_replies": ["Tell me more", "Help me with...", "What can you do?"],
+        "sample_conversations": [{"user": "Hello", "bot": f"Hey there! I'm {name}. What can I help you with?"}],
+        "response_style": {"max_length": "concise", "use_emoji": True, "formatting": "markdown"},
+        "user_original_request": user_request
         },
         "user_original_request": user_request
     }
