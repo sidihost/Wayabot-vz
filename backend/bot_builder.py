@@ -21,7 +21,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode, ChatAction
 
-from ai_engine import generate_response, chat_completion, get_groq_client, BEST_MODEL
+from ai_engine import generate_response, chat_completion, BEST_MODEL
 import database as db
 
 # Agent features - DISABLED until properly tested
@@ -688,7 +688,7 @@ Return ONLY valid JSON."""
         
     except json.JSONDecodeError as e:
         return {
-            "bot_name": "Custom Bot",
+            "bot_name": "My Assistant",
             "bot_description": description[:100],
             "greeting_message": f"Hello! I'm your assistant. How can I help?",
             "system_prompt": f"You are a helpful assistant that {description[:200]}",
@@ -703,7 +703,7 @@ Return ONLY valid JSON."""
     except asyncio.TimeoutError:
         # Return a working fallback instead of error
         return {
-            "bot_name": "Custom Bot",
+            "bot_name": "My Assistant",
             "bot_description": description[:100],
             "greeting_message": f"Hello! I'm your assistant. How can I help?",
             "system_prompt": f"You are a helpful assistant that {description[:200]}",
@@ -721,7 +721,7 @@ Return ONLY valid JSON."""
         if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str or "invalid" in error_str:
             # Return a working fallback bot instead of failing
             return {
-                "bot_name": "Custom Bot",
+                "bot_name": "My Assistant",
                 "bot_description": description[:100],
                 "greeting_message": f"Hello! I'm your assistant. How can I help?",
                 "system_prompt": f"You are a helpful assistant that {description[:200]}",
@@ -740,7 +740,7 @@ Return ONLY valid JSON."""
 def _create_fallback_config(description: str) -> Dict[str, Any]:
     """Create a fallback bot config when AI is unavailable."""
     return {
-        "bot_name": "Custom Bot",
+        "bot_name": "My Assistant",
         "bot_description": description[:100] if description else "A helpful AI bot",
         "greeting_message": "Hello! I'm your assistant. How can I help you today?",
         "system_prompt": f"You are a helpful AI assistant. {description[:200] if description else 'Be friendly and helpful.'}",

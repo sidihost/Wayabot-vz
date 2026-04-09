@@ -1,6 +1,6 @@
 """
 Waya - The Ultimate Intelligent Telegram Bot Builder
-Powered by Groq AI for lightning-fast intelligent responses.
+Powered by multi-provider AI for lightning-fast intelligent responses.
 
 Features:
 - AI-powered conversations with context memory
@@ -316,7 +316,7 @@ async def lifespan(app: fastapi.FastAPI):
 # Create FastAPI app
 app = fastapi.FastAPI(
     title="Waya - Intelligent Telegram Bot Builder",
-    description="The ultimate AI-powered Telegram bot builder with Groq integration",
+    description="The ultimate AI-powered Telegram bot builder with multi-provider AI",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -343,7 +343,7 @@ async def root():
         "tagline": "The Ultimate Intelligent Telegram Bot Builder",
         "version": "1.0.0",
         "status": "running",
-        "powered_by": "Groq AI",
+        "powered_by": "Multi-Provider AI",
         "database": "PostgreSQL",
         "features": [
             "AI-powered conversations with context memory",

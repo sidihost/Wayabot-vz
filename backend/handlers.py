@@ -1913,10 +1913,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 reply_markup=reply_markup
             )
             
-            # Send greeting from the bot
-            greeting = config.get('greeting_message', f"Hi! I'm {bot_name}.")
-            clean_greeting = clean_markdown_for_telegram(greeting)
-            await update.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+# Send greeting from the bot
+        greeting = config.get('greeting_message', f"Hi! I'm {bot_name}.")
+        clean_greeting = clean_markdown_for_telegram(greeting)
+        await update.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
             
         except Exception as e:
             print(f"Bot creation error: {e}")
@@ -2624,7 +2624,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         
         # Send greeting from the bot
         clean_greeting = clean_markdown_for_telegram(greeting)
-        await update.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
         return
     
     # Check for menu button presses
@@ -3235,7 +3235,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Send greeting
         greeting = config.get('greeting_message', f"Hi! I'm {bot_name}.")
         clean_greeting = clean_markdown_for_telegram(greeting)
-        await query.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+        await query.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
     
     elif data.startswith("bb_feat_"):
         feature_key = data.replace("bb_feat_", "")
@@ -3681,7 +3681,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         # Send greeting
         clean_greeting = clean_markdown_for_telegram(greeting)
-        await query.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+        await query.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
 
     elif data == "build_new_suggestion":
         # Get a new suggestion
@@ -3769,7 +3769,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
             # Send greeting
             clean_greeting = clean_markdown_for_telegram(greeting)
-            await query.message.reply_text(f"*{bot_name}:* {clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+            await query.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
     
     elif data == "show_all_templates":
         templates = await db.get_bot_templates()
