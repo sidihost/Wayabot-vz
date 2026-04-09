@@ -1306,7 +1306,11 @@ async def show_bot_builder_menu(update: Update, context: ContextTypes.DEFAULT_TY
     )
     
     if update.callback_query:
-        await update.callback_query.message.edit_text(
+        try:
+            await update.callback_query.message.delete()
+        except:
+            pass
+        await update.callback_query.message.chat.send_message(
             text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup
         )
     else:
@@ -1326,7 +1330,11 @@ async def show_category_templates(update: Update, context: ContextTypes.DEFAULT_
     keyboard.append([InlineKeyboardButton("Back", callback_data="bb_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.message.edit_text(
+    try:
+        await update.callback_query.message.delete()
+    except:
+        pass
+    await update.callback_query.message.chat.send_message(
         "*Bot Templates*\n\n"
         "Choose a category to see pre-built templates:",
         parse_mode=ParseMode.MARKDOWN,
@@ -1342,7 +1350,11 @@ async def show_my_bots(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not bots:
         keyboard = [[InlineKeyboardButton("Create Bot", callback_data="bb_create_ai")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.callback_query.message.edit_text(
+        try:
+            await update.callback_query.message.delete()
+        except:
+            pass
+        await update.callback_query.message.chat.send_message(
             "*My Bots*\n\nYou haven't created any bots yet.\nTap the button to create your first one!",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -1360,7 +1372,11 @@ async def show_my_bots(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     keyboard.append([InlineKeyboardButton("Back", callback_data="bb_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.message.edit_text(
+    try:
+        await update.callback_query.message.delete()
+    except:
+        pass
+    await update.callback_query.message.chat.send_message(
         f"*My Bots* ({len(bots)} total)\n\n"
         "Tap a bot name to use it, or Edit to modify:",
         parse_mode=ParseMode.MARKDOWN,
@@ -1405,7 +1421,11 @@ async def show_bot_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE,
     bot_type = bot.get('bot_type', 'custom')
     type_name = {"business": "Business", "channel": "Channel", "custom": "Custom"}.get(bot_type, "Custom")
     
-    await update.callback_query.message.edit_text(
+    try:
+        await update.callback_query.message.delete()
+    except:
+        pass
+    await update.callback_query.message.chat.send_message(
         f"*Edit: {bot.get('name')}*\n\n"
         f"Type: {type_name}\n"
         f"Uses: {bot.get('usage_count', 0)}\n"
@@ -1427,7 +1447,11 @@ async def show_poll_creator(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.message.edit_text(
+    try:
+        await update.callback_query.message.delete()
+    except:
+        pass
+    await update.callback_query.message.chat.send_message(
         "*Create Poll*\n\n"
         "What type of poll would you like to create?\n\n"
         "*Regular Poll* - Simple voting\n"
@@ -1450,7 +1474,11 @@ async def show_business_bot_setup(update: Update, context: ContextTypes.DEFAULT_
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.message.edit_text(
+    try:
+        await update.callback_query.message.delete()
+    except:
+        pass
+    await update.callback_query.message.chat.send_message(
         "*Business Bot Setup*\n\n"
         "Create a bot for your Telegram Business account!\n\n"
         "*Features:*\n"
@@ -1475,7 +1503,11 @@ async def show_channel_bot_setup(update: Update, context: ContextTypes.DEFAULT_T
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.message.edit_text(
+    try:
+        await update.callback_query.message.delete()
+    except:
+        pass
+    await update.callback_query.message.chat.send_message(
         "*Channel Bot Setup*\n\n"
         "Create a bot to manage your Telegram channel!\n\n"
         "*Features:*\n"
@@ -1526,7 +1558,11 @@ async def handle_feature_selection(update: Update, context: ContextTypes.DEFAULT
     keyboard.append([InlineKeyboardButton("Back", callback_data="bb_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.message.edit_text(
+    try:
+        await update.callback_query.message.delete()
+    except:
+        pass
+    await update.callback_query.message.chat.send_message(
         "*Select Features*\n\n"
         f"Selected: {len(selected)} features\n\n"
         "Tap features to toggle them:",

@@ -3021,7 +3021,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await bot_builder.show_bot_builder_menu(update, context)
     
     elif data == "bb_create_ai":
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*What should your bot do?*\n\n"
             "Tell me what you have in mind:\n\n"
             "- `a support bot for my coffee shop`\n"
@@ -3058,7 +3062,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_editname_"):
         bot_id = int(data.replace("bb_editname_", ""))
         await db.update_session_state(user_id, "bb_editing_name", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Edit Bot Name*\n\n"
             "Send the new name for your bot:",
             parse_mode=ParseMode.MARKDOWN
@@ -3067,7 +3075,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_editpersona_"):
         bot_id = int(data.replace("bb_editpersona_", ""))
         await db.update_session_state(user_id, "bb_editing_persona", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*How should your bot act?*\n\n"
             "Just describe what you want to change:\n\n"
             "Example: `make it friendlier and add some humor`\n\n"
@@ -3078,7 +3090,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_editgreet_"):
         bot_id = int(data.replace("bb_editgreet_", ""))
         await db.update_session_state(user_id, "bb_editing_greeting", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*What should your bot say first?*\n\n"
             "This is what users see when they start chatting:",
             parse_mode=ParseMode.MARKDOWN
@@ -3087,7 +3103,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_addcmd_"):
         bot_id = int(data.replace("bb_addcmd_", ""))
         await db.update_session_state(user_id, "bb_adding_command", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Add Custom Command*\n\n"
             "Format: `/command_name | Description | Response`\n\n"
             "Example:\n"
@@ -3099,7 +3119,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_addknow_"):
         bot_id = int(data.replace("bb_addknow_", ""))
         await db.update_session_state(user_id, "bb_adding_knowledge", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Add to Knowledge Base*\n\n"
             "Teach your bot new information.\n\n"
             "Format: `Question | Answer`\n\n"
@@ -3112,7 +3136,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_addauto_"):
         bot_id = int(data.replace("bb_addauto_", ""))
         await db.update_session_state(user_id, "bb_adding_automation", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Add Automation*\n\n"
             "Create automatic responses for keywords.\n\n"
             "Format: `trigger_word | response`\n\n"
@@ -3134,7 +3162,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard = [[InlineKeyboardButton("Back", callback_data=f"bb_edit_{bot_id}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             f"*Analytics: {analytics['bot_name']}*\n\n"
             f"*Usage*\n"
             f"Total uses: {analytics['total_uses']}\n"
@@ -3154,7 +3186,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_code_"):
         bot_id = int(data.replace("bb_code_", ""))
         
-        await query.message.edit_text("Generating Python code...")
+        try:
+            await query.message.delete()
+        except:
+            pass
+        
+        loading = await query.message.chat.send_message("Generating Python code...")
         
         code = await bot_builder.generate_bot_code(bot_id, user_id)
         
@@ -3166,7 +3203,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard = [[InlineKeyboardButton("Back", callback_data=f"bb_edit_{bot_id}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.reply_document(
+        try:
+            await loading.delete()
+        except:
+            pass
+        
+        await query.message.chat.send_document(
             document=code_file,
             filename="my_bot.py",
             caption=(
@@ -3191,7 +3233,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Delete Bot?*\n\n"
             "This action cannot be undone. All bot data will be lost.\n\n"
             "Are you sure?",
@@ -3208,6 +3254,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 bot_id, user_id
             )
         
+        try:
+            await query.message.delete()
+        except:
+            pass
         await query.answer("Bot deleted!")
         await bot_builder.show_my_bots(update, context)
     
@@ -3224,7 +3274,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard.append([InlineKeyboardButton("Back", callback_data="bb_templates")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             f"*{cat_info.get('name', 'Category')} Bots*\n\n"
             f"Select a template to create:",
             parse_mode=ParseMode.MARKDOWN,
@@ -3234,12 +3288,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_tmpl_"):
         template_name = data.replace("bb_tmpl_", "")
         # Create bot from template using AI
-        await query.message.edit_text("Creating your bot...")
+        try:
+            await query.message.delete()
+        except:
+            pass
+        loading = await query.message.chat.send_message("Creating your bot...")
         
         result = await bot_builder.create_bot_with_ai(update, context, template_name.replace('_', ' '))
         
         if "error" in result:
-            await query.message.edit_text(f"Error: {result['error']}")
+            try:
+                await loading.delete()
+            except:
+                pass
+            await query.message.chat.send_message(f"Oops, something went wrong. Try again!")
             return
         
         config = result["config"]
