@@ -1148,13 +1148,13 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # If no description provided, show a clean prompt
     if not context.args:
         await update.message.reply_text(
-            "*Describe your bot*\n\n"
-            "Just tell me what you want in plain English:\n\n"
-            "`/build a customer support bot for my bakery`\n"
-            "`/build fitness coach that gives daily workouts`\n"
-            "`/build trivia game about movies`\n"
-            "`/build language tutor for Spanish learners`\n\n"
-            "I'll create a complete, working bot in seconds.",
+            "*What kind of bot do you want?*\n\n"
+            "Just tell me in your own words:\n\n"
+            "`/build a support bot for my bakery`\n"
+            "`/build a fitness coach for daily workouts`\n"
+            "`/build a trivia game about movies`\n"
+            "`/build a Spanish language tutor`\n\n"
+            "Your bot will be ready in seconds.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -1164,13 +1164,13 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     # Clean, professional loading sequence
     await update.message.chat.send_action(ChatAction.TYPING)
-    loading_msg = await update.message.reply_text("*Understanding your vision...*", parse_mode=ParseMode.MARKDOWN)
+    loading_msg = await update.message.reply_text("*Got it, let me work on that...*", parse_mode=ParseMode.MARKDOWN)
     
     # AI creates the bot
     await update.message.chat.send_action(ChatAction.TYPING)
     config = await generate_bot_suggestion(user_request)
     
-    await loading_msg.edit_text("*Building your bot...*", parse_mode=ParseMode.MARKDOWN)
+    await loading_msg.edit_text("*Putting it together...*", parse_mode=ParseMode.MARKDOWN)
     
     if "error" in config:
         await loading_msg.edit_text(
@@ -1900,27 +1900,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             })
             
             await loading.edit_text(
-                f"*Your Bot is Ready!*\n\n"
-                f"*{bot_name}*\n"
+                f"*{bot_name} is ready!*\n\n"
                 f"{config.get('bot_description', '')}\n\n"
-                f"*Features:*\n" +
+                f"*What it can do:*\n" +
                 "\n".join([f"- {f}" for f in config.get('features', [])[:5]]) +
-                f"\n\n*What would you like to do?*\n\n"
-                f"1. *Launch on Telegram* - Deploy as @{suggested_username}\n"
-                f"2. *Chat Here* - Test it right now in Waya\n\n"
-                f"_You can share your bot with anyone once deployed!_",
+                f"\n\n*Next steps:*\n\n"
+                f"*Launch on Telegram* - Make it live as @{suggested_username}\n"
+                f"*Chat Here* - Try it out right now\n\n"
+                f"_Share your bot with friends once it's live!_",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=reply_markup
             )
             
-# Send greeting from the bot
-        greeting = config.get('greeting_message', f"Hi! I'm {bot_name}.")
-        clean_greeting = clean_markdown_for_telegram(greeting)
-        await update.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+            # Send greeting from the bot
+            greeting = config.get('greeting_message', f"Hey there! I'm {bot_name}, nice to meet you!")
+            clean_greeting = clean_markdown_for_telegram(greeting)
+            await update.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
             
         except Exception as e:
             print(f"Bot creation error: {e}")
-            await loading.edit_text("Sorry, something went wrong. Please try again with /build")
+            await loading.edit_text("Oops, something went wrong. Try again with /build")
         
         await db.clear_session_state(user_id)
         return
@@ -2989,14 +2988,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     elif data == "bb_create_ai":
         await query.message.edit_text(
-            "*Create with AI*\n\n"
-            "Just describe the bot you want!\n\n"
-            "Examples:\n"
-            "- `a customer support bot for my coffee shop`\n"
-            "- `a fitness coach that gives workout tips`\n"
-            "- `a quiz bot about world history`\n"
-            "- `a language tutor for Spanish`\n\n"
-            "Send your description now:",
+            "*What should your bot do?*\n\n"
+            "Tell me what you have in mind:\n\n"
+            "- `a support bot for my coffee shop`\n"
+            "- `a fitness coach with workout tips`\n"
+            "- `a quiz game about world history`\n"
+            "- `a Spanish tutor for beginners`\n\n"
+            "Go ahead, type it out:",
             parse_mode=ParseMode.MARKDOWN
         )
         await db.update_session_state(user_id, "bb_waiting_description", {})
@@ -3036,10 +3034,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         bot_id = int(data.replace("bb_editpersona_", ""))
         await db.update_session_state(user_id, "bb_editing_persona", {"bot_id": bot_id})
         await query.message.edit_text(
-            "*Edit Bot Personality*\n\n"
-            "Describe how your bot should behave:\n\n"
-            "Example: `Make it more friendly and casual, add humor`\n\n"
-            "Send your changes:",
+            "*How should your bot act?*\n\n"
+            "Just describe what you want to change:\n\n"
+            "Example: `make it friendlier and add some humor`\n\n"
+            "Type your changes:",
             parse_mode=ParseMode.MARKDOWN
         )
     
@@ -3047,8 +3045,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         bot_id = int(data.replace("bb_editgreet_", ""))
         await db.update_session_state(user_id, "bb_editing_greeting", {"bot_id": bot_id})
         await query.message.edit_text(
-            "*Edit Greeting Message*\n\n"
-            "Send the new greeting message your bot will use when users start a conversation:",
+            "*What should your bot say first?*\n\n"
+            "This is what users see when they start chatting:",
             parse_mode=ParseMode.MARKDOWN
         )
     
