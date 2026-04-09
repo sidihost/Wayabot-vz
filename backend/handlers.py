@@ -720,7 +720,7 @@ async def remind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "• `/remind Meeting tomorrow at 3pm`\n"
             "• `/remind Take medicine at 9am daily`\n"
             "• `/remind Pay bills on Friday`\n\n"
-            "Just describe when and what! ���",
+            "Just describe when and what! �����",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -1727,7 +1727,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     text = "📈 *Your Usage Statistics*\n\n"
     text += f"💬 Total Messages: {stats.get('total_messages', 0):,}\n"
-    text += f"🤖 AI Requests: {stats.get('total_ai_requests', 0):,}\n"
+    text += f"�� AI Requests: {stats.get('total_ai_requests', 0):,}\n"
     text += f"⏰ Reminders: {stats.get('total_reminders_created', 0)}\n"
     text += f"✅ Tasks: {stats.get('total_tasks_created', 0)}\n"
     text += f"📝 Notes: {stats.get('total_notes', 0)}\n"
@@ -1851,15 +1851,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if state == "bb_waiting_description":
         # User is describing the bot they want to create
         await update.message.chat.send_action(ChatAction.TYPING)
-        loading = await update.message.reply_text("Creating your bot...")
+        loading = await update.message.reply_text("*Got it, let me work on that...*", parse_mode=ParseMode.MARKDOWN)
         
         try:
             result = await bot_builder.create_bot_with_ai(update, context, message_text)
             
-            if "error" in result:
-                await loading.edit_text(f"Error: {result['error']}")
-                await db.clear_session_state(user_id)
-                return
+        if "error" in result:
+            try:
+                await loading.delete()
+            except:
+                pass
+            await update.message.reply_text(f"Oops, something went wrong. Try again!")
+            await db.clear_session_state(user_id)
+            return
             
             config = result["config"]
             share_link = result["share_link"]
@@ -1899,27 +1903,44 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 "suggested_username": suggested_username
             })
             
-            await loading.edit_text(
+            # Delete loading message for clean display
+            try:
+                await loading.delete()
+            except:
+                pass
+            
+            # Send clean final message
+            features_text = "\n".join([f"  - {f}" for f in config.get('features', [])[:5]])
+            
+            await update.message.reply_text(
                 f"*{bot_name} is ready!*\n\n"
                 f"{config.get('bot_description', '')}\n\n"
-                f"*What it can do:*\n" +
-                "\n".join([f"- {f}" for f in config.get('features', [])[:5]]) +
-                f"\n\n*Next steps:*\n\n"
-                f"*Launch on Telegram* - Make it live as @{suggested_username}\n"
-                f"*Chat Here* - Try it out right now\n\n"
-                f"_Share your bot with friends once it's live!_",
+                f"*What it can do:*\n{features_text}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            # Send greeting from the bot as separate message
+            greeting = config.get('greeting_message', f"Hey there! I'm {bot_name}, nice to meet you!")
+            clean_greeting = clean_markdown_for_telegram(greeting)
+            await update.message.reply_text(
+                f"*{bot_name}:*\n_{clean_greeting}_",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            # Send action buttons separately
+            await update.message.reply_text(
+                "*What would you like to do?*",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=reply_markup
             )
             
-            # Send greeting from the bot
-            greeting = config.get('greeting_message', f"Hey there! I'm {bot_name}, nice to meet you!")
-            clean_greeting = clean_markdown_for_telegram(greeting)
-            await update.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
-            
         except Exception as e:
             print(f"Bot creation error: {e}")
-            await loading.edit_text("Oops, something went wrong. Try again with /build")
+            try:
+                await loading.delete()
+            except:
+                pass
+            await update.message.reply_text("Oops, something went wrong. Try again with /build")
         
         await db.clear_session_state(user_id)
         return
