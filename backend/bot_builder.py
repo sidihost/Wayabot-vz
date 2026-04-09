@@ -823,10 +823,6 @@ async def edit_bot_with_prompt(bot_id: int, user_id: int, edit_request: str) -> 
     if bot.get('user_id') != user_id:
         return {"error": "You don't own this bot"}
     
-    client = get_groq_client()
-    if not client:
-        return {"error": "AI service not available"}
-    
     current_config = bot.get('config', {})
     if isinstance(current_config, str):
         try:
@@ -855,21 +851,21 @@ Generate the updated fields as JSON. Only include fields that need to change:
 
 Return ONLY valid JSON with the changes."""
 
+    messages = [
+        {"role": "system", "content": "You edit Telegram bot configurations. Return only the changed fields as JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=BEST_MODEL,
-                messages=[
-                    {"role": "system", "content": "You edit Telegram bot configurations. Return only the changed fields as JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.5,
-                max_tokens=800
-            ),
+        result = await asyncio.wait_for(
+            chat_completion(messages, temperature=0.5, max_tokens=800),
             timeout=20.0
         )
         
-        result = response.choices[0].message.content.strip()
+        if not result:
+            return {"error": "AI service temporarily unavailable"}
+        
+        result = result.strip()
         
         if "```json" in result:
             result = result.split("```json")[1].split("```")[0]
