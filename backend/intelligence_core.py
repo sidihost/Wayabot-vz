@@ -10,18 +10,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 
-try:
-    from memory_engine import MemoryEngine, init_memory_engine, get_memory_engine
-    from tools_engine import ToolsEngine, get_tools_engine, ToolResult
-    from cognitive_engine import CognitiveEngine, CognitiveContext, ReasoningChain, init_cognitive_engine, get_cognitive_engine
-    from learning_engine import LearningEngine, UserProfile, init_learning_engine, get_learning_engine
-    from proactive_engine import ProactiveEngine, ProactiveAction, init_proactive_engine, get_proactive_engine
-except ImportError:
-    from .memory_engine import MemoryEngine, init_memory_engine, get_memory_engine
-    from .tools_engine import ToolsEngine, get_tools_engine, ToolResult
-    from .cognitive_engine import CognitiveEngine, CognitiveContext, ReasoningChain, init_cognitive_engine, get_cognitive_engine
-    from .learning_engine import LearningEngine, UserProfile, init_learning_engine, get_learning_engine
-    from .proactive_engine import ProactiveEngine, ProactiveAction, init_proactive_engine, get_proactive_engine
+# Import intelligence engines - these are in the same directory
+from memory_engine import MemoryEngine, init_memory_engine, get_memory_engine
+from tools_engine import ToolsEngine, get_tools_engine, ToolResult
+from cognitive_engine import CognitiveEngine, CognitiveContext, ReasoningChain, init_cognitive_engine, get_cognitive_engine
+from learning_engine import LearningEngine, UserProfile, init_learning_engine, get_learning_engine
+from proactive_engine import ProactiveEngine, ProactiveAction, init_proactive_engine, get_proactive_engine
 
 logger = logging.getLogger(__name__)
 
@@ -176,10 +170,7 @@ class IntelligenceCore:
             else:
                 # Fallback: use basic AI engine
                 if self.ai_engine:
-                    try:
-                        import ai_engine as ai_mod
-                    except ImportError:
-                        from . import ai_engine as ai_mod
+                    import ai_engine as ai_mod
                     response.message = await ai_mod.generate_response(
                         message,
                         conversation_history,
@@ -261,7 +252,7 @@ class IntelligenceCore:
     ):
         """Handle user feedback"""
         if self.learning:
-            from .learning_engine import FeedbackType
+            from learning_engine import FeedbackType
             ft = FeedbackType(feedback_type) if feedback_type in FeedbackType.__members__.values() else FeedbackType.THUMBS_UP
             await self.learning.record_feedback(user_id, ft, message, response)
     
