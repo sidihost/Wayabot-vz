@@ -761,8 +761,6 @@ def _create_fallback_bot_config(user_request: str) -> Dict[str, Any]:
         "sample_conversations": [{"user": "Hello", "bot": f"Hey there! I'm {name}. What can I help you with?"}],
         "response_style": {"max_length": "concise", "use_emoji": True, "formatting": "markdown"},
         "user_original_request": user_request
-        },
-        "user_original_request": user_request
     }
 
 
