@@ -1,40 +1,91 @@
 """
 Waya Bot Builder - AI Engine Module
-🏆 MAX POWER: Llama 4 + Whisper + COMPOUND (Agentic AI with tools)!
+Multi-provider AI: DigitalOcean Gradient, Groq, OpenAI-compatible
 """
 
 import os
 import json
+import httpx
 from typing import Optional, Dict, Any, List
-from groq import AsyncGroq
 from datetime import datetime
 
-# 🏆 BEST Groq Models - Use actual model names (not prefixed)
-BEST_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")  # Configurable via env
-FALLBACK_MODEL = "llama-3.1-8b-instant"  # Faster, cheaper fallback
-REASONING_MODEL = BEST_MODEL  # Use same model for reasoning
+# Try to import Groq, but make it optional
+try:
+    from groq import AsyncGroq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    AsyncGroq = None
 
-# 🎙 Whisper - FASTEST transcription
+# AI Provider configuration
+# Priority: DIGITALOCEAN > GROQ > OPENAI_COMPATIBLE
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "auto").lower()  # auto, digitalocean, groq, openai
+
+# DigitalOcean Gradient configuration
+DO_API_KEY = os.environ.get("DIGITALOCEAN_API_KEY") or os.environ.get("DO_API_KEY")
+DO_BASE_URL = "https://inference.do-ai.run/v1"
+DO_MODEL = os.environ.get("DO_MODEL", "meta-llama/Llama-3.3-70B-Instruct-Turbo")
+
+# Groq configuration
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+# OpenAI-compatible configuration (fallback)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+
+# Determine best available provider
+def get_ai_provider() -> str:
+    """Determine which AI provider to use based on available keys."""
+    if AI_PROVIDER != "auto":
+        return AI_PROVIDER
+    
+    # Auto-detect: prioritize DigitalOcean > Groq > OpenAI
+    if DO_API_KEY:
+        return "digitalocean"
+    if GROQ_API_KEY and GROQ_AVAILABLE:
+        return "groq"
+    if OPENAI_API_KEY:
+        return "openai"
+    
+    # Default to digitalocean if nothing is set (will fail gracefully)
+    return "digitalocean"
+
+# Model configuration based on provider
+def get_model_config() -> tuple[str, str, str]:
+    """Get (base_url, api_key, model) for current provider."""
+    provider = get_ai_provider()
+    
+    if provider == "digitalocean":
+        return (DO_BASE_URL, DO_API_KEY, DO_MODEL)
+    elif provider == "groq":
+        return (None, GROQ_API_KEY, GROQ_MODEL)  # Groq uses its own client
+    elif provider == "openai":
+        return (OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL)
+    else:
+        return (DO_BASE_URL, DO_API_KEY, DO_MODEL)
+
+# Legacy compatibility
+BEST_MODEL = GROQ_MODEL
+FALLBACK_MODEL = "llama-3.1-8b-instant"
+REASONING_MODEL = BEST_MODEL
+COMPOUND_MODEL = BEST_MODEL
+
+# Whisper model for voice
 WHISPER_MODEL = "whisper-large-v3-turbo"
 
-# 🤖 Fallback model for compound tasks
-COMPOUND_MODEL = BEST_MODEL  # Use main model as fallback
-
-# List of models to try in order if one fails
+# Fallback chain for Groq
 MODEL_FALLBACK_CHAIN = [
-    BEST_MODEL,
-    "llama-3.1-8b-instant",  # Fast fallback
-    "meta-llama/llama-4-scout-17b-16e-instruct",  # Llama 4 preview
+    GROQ_MODEL,
+    "llama-3.1-8b-instant",
 ]
 
 
 async def compound_response(user_message: str, conversation_history: list = None) -> str:
     """
-    🤖 COMPOUND - Agentic AI with tools!
-    Web search, code execution, visit websites autonomously!
+    Agentic AI with tools - uses universal chat completion.
     """
-    client = get_groq_client()
-    
     system_msg = """You are an advanced AI with tools:
 - Web search for current info
 - Code execution  
@@ -51,16 +102,14 @@ Be helpful, concise. Use tools when needed."""
     messages.append({"role": "user", "content": user_message})
     
     try:
-        response = await client.chat.completions.create(
-            model=COMPOUND_MODEL,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=2000
-        )
-        return response.choices[0].message.content
+        result = await chat_completion(messages, temperature=0.7, max_tokens=2000)
+        if result:
+            return result
     except Exception as e:
         print(f"Compound error: {e}")
-        return await generate_response(user_message, conversation_history)
+    
+    # Fallback to regular response
+    return await generate_response(user_message, conversation_history)
 
 
 # Initialize client
@@ -69,10 +118,13 @@ groq_client: Optional[AsyncGroq] = None
 
 async def transcribe_voice(audio_bytes: bytes, prompt: str = None) -> str:
     """
-    🎙 Transcribe voice using Groq Whisper - FASTEST!
-    Voice → Text in milliseconds!
+    Transcribe voice using Groq Whisper.
+    Note: Voice transcription requires Groq API key.
     """
     client = get_groq_client()
+    if not client:
+        print("[AI] Voice transcription unavailable - Groq not configured")
+        return None
     
     import io
     audio_file = io.BytesIO(audio_bytes)
@@ -100,10 +152,13 @@ async def transcribe_voice(audio_bytes: bytes, prompt: str = None) -> str:
 
 async def translate_audio(audio_bytes: bytes, target_language: str = "en") -> str:
     """
-    🌐 Translate audio to text in target language!
-    Uses Groq Whisper translation.
+    Translate audio to text in target language.
+    Note: Audio translation requires Groq API key.
     """
     client = get_groq_client()
+    if not client:
+        print("[AI] Audio translation unavailable - Groq not configured")
+        return None
     
     import io
     audio_file = io.BytesIO(audio_bytes)
@@ -123,28 +178,166 @@ async def translate_audio(audio_bytes: bytes, target_language: str = "en") -> st
         return None
 
 
-# Initialize Groq client
-groq_client: Optional[AsyncGroq] = None
+# Initialize clients
+groq_client: Optional[Any] = None
+http_client: Optional[httpx.AsyncClient] = None
 
 
-def get_groq_client() -> AsyncGroq:
-    """Get or create Groq client."""
+def get_groq_client():
+    """Get or create Groq client (only if Groq is available)."""
     global groq_client
+    if not GROQ_AVAILABLE:
+        return None
     if groq_client is None:
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
-            raise ValueError("GROQ_API_KEY environment variable is not set")
-        # Validate API key format (should start with gsk_)
-        if not api_key.startswith("gsk_"):
-            print(f"Warning: GROQ_API_KEY may be invalid - expected format starting with 'gsk_'")
+            return None
         groq_client = AsyncGroq(api_key=api_key)
     return groq_client
 
 
-def reset_groq_client():
-    """Reset the Groq client (useful if API key changes)."""
-    global groq_client
+def get_http_client() -> httpx.AsyncClient:
+    """Get or create HTTP client for OpenAI-compatible APIs."""
+    global http_client
+    if http_client is None:
+        http_client = httpx.AsyncClient(timeout=60.0)
+    return http_client
+
+
+def reset_clients():
+    """Reset all AI clients."""
+    global groq_client, http_client
     groq_client = None
+    http_client = None
+
+
+async def chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float = 0.7,
+    max_tokens: int = 1500
+) -> Optional[str]:
+    """
+    Universal chat completion that works with any provider.
+    Tries providers in order: DigitalOcean > Groq > OpenAI
+    """
+    provider = get_ai_provider()
+    print(f"[AI] Using provider: {provider}")
+    
+    # Try DigitalOcean Gradient first
+    if provider == "digitalocean" and DO_API_KEY:
+        try:
+            result = await _do_chat_completion(messages, temperature, max_tokens)
+            if result:
+                return result
+        except Exception as e:
+            print(f"[AI] DigitalOcean failed: {e}")
+    
+    # Try Groq
+    if (provider == "groq" or provider == "digitalocean") and GROQ_API_KEY and GROQ_AVAILABLE:
+        try:
+            result = await _groq_chat_completion(messages, temperature, max_tokens)
+            if result:
+                return result
+        except Exception as e:
+            print(f"[AI] Groq failed: {e}")
+    
+    # Try OpenAI-compatible
+    if OPENAI_API_KEY:
+        try:
+            result = await _openai_chat_completion(messages, temperature, max_tokens)
+            if result:
+                return result
+        except Exception as e:
+            print(f"[AI] OpenAI failed: {e}")
+    
+    return None
+
+
+async def _do_chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float,
+    max_tokens: int
+) -> Optional[str]:
+    """DigitalOcean Gradient chat completion."""
+    client = get_http_client()
+    
+    response = await client.post(
+        f"{DO_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {DO_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": DO_MODEL,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+    )
+    
+    if response.status_code == 200:
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+    else:
+        error_text = response.text
+        print(f"[AI] DigitalOcean error {response.status_code}: {error_text}")
+        raise Exception(f"DigitalOcean API error: {response.status_code}")
+
+
+async def _groq_chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float,
+    max_tokens: int
+) -> Optional[str]:
+    """Groq chat completion."""
+    client = get_groq_client()
+    if not client:
+        return None
+    
+    # Try models in fallback chain
+    for model in MODEL_FALLBACK_CHAIN:
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"[AI] Groq model {model} failed: {e}")
+            continue
+    
+    return None
+
+
+async def _openai_chat_completion(
+    messages: List[Dict[str, str]],
+    temperature: float,
+    max_tokens: int
+) -> Optional[str]:
+    """OpenAI-compatible chat completion."""
+    client = get_http_client()
+    
+    response = await client.post(
+        f"{OPENAI_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": OPENAI_MODEL,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+    )
+    
+    if response.status_code == 200:
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+    else:
+        raise Exception(f"OpenAI API error: {response.status_code}")
 
 
 # Default system prompt for Waya
@@ -253,8 +446,7 @@ async def generate_response(
     emotion_context: Dict[str, Any] = None,
     empathic_mode: bool = False
 ) -> str:
-    """Generate an AI response using Groq with optional emotion awareness."""
-    client = get_groq_client()
+    """Generate an AI response using the best available provider."""
     
     # Build the system prompt with user context
     base_prompt = system_prompt or WAYA_SYSTEM_PROMPT
@@ -300,33 +492,15 @@ Respond in a {response_style} manner. Adapt your tone and language accordingly:
     # Add current message
     messages.append({"role": "user", "content": user_message})
     
-    # Try each model in the fallback chain
-    last_error = None
-    for model in MODEL_FALLBACK_CHAIN:
-        try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            last_error = e
-            error_str = str(e).lower()
-            # If it's an auth error, don't try other models - the key is invalid
-            if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "invalid" in error_str:
-                print(f"[AI] Auth error with Groq API: {e}")
-                break
-            # For other errors (rate limit, model not found), try next model
-            print(f"[AI] Model {model} failed: {e}, trying next...")
-            continue
+    # Use universal chat completion (tries all providers)
+    try:
+        result = await chat_completion(messages, temperature, max_tokens)
+        if result:
+            return result
+    except Exception as e:
+        print(f"[AI] All providers failed: {e}")
     
-    # All models failed
-    error_str = str(last_error).lower() if last_error else ""
-    if "403" in error_str or "401" in error_str or "unauthorized" in error_str or "access denied" in error_str:
-        return "I'm having trouble connecting right now. Please try again in a moment."
-    return "I apologize, but I encountered an issue. Please try again."
+    return "I'm having trouble connecting right now. Please try again in a moment."
 
 
 async def generate_response_streaming(
