@@ -1424,7 +1424,7 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await track_command(update.effective_user.id, "chat")
     
     await update.message.reply_text(
-        "💬 *AI Chat Mode*\n\n"
+        "��� *AI Chat Mode*\n\n"
         "I'm ready to chat! Just type your message.\n\n"
         "I can help you with:\n"
         "• Answering questions\n"
@@ -1727,7 +1727,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     text = "📈 *Your Usage Statistics*\n\n"
     text += f"💬 Total Messages: {stats.get('total_messages', 0):,}\n"
-    text += f"�� AI Requests: {stats.get('total_ai_requests', 0):,}\n"
+    text += f"��� AI Requests: {stats.get('total_ai_requests', 0):,}\n"
     text += f"⏰ Reminders: {stats.get('total_reminders_created', 0)}\n"
     text += f"✅ Tasks: {stats.get('total_tasks_created', 0)}\n"
     text += f"📝 Notes: {stats.get('total_notes', 0)}\n"
@@ -1856,14 +1856,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         try:
             result = await bot_builder.create_bot_with_ai(update, context, message_text)
             
-        if "error" in result:
-            try:
-                await loading.delete()
-            except:
-                pass
-            await update.message.reply_text(f"Oops, something went wrong. Try again!")
-            await db.clear_session_state(user_id)
-            return
+            if "error" in result:
+                try:
+                    await loading.delete()
+                except:
+                    pass
+                await update.message.reply_text("Oops, something went wrong. Try again!")
+                await db.clear_session_state(user_id)
+                return
             
             config = result["config"]
             share_link = result["share_link"]
