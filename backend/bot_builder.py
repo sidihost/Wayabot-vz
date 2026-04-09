@@ -1028,7 +1028,7 @@ async def get_bot_analytics(bot_id: int, user_id: int) -> Dict[str, Any]:
 async def generate_bot_code(bot_id: int, user_id: int) -> str:
     """
     Generate complete standalone Python code for a bot.
-    Uses python-telegram-bot library and OpenAI API.
+    Uses python-telegram-bot library and Digital Ocean GenAI API.
     """
     bot = await db.get_bot(bot_id)
     if not bot:
@@ -1055,7 +1055,7 @@ Requirements:
 
 Environment Variables:
     TELEGRAM_BOT_TOKEN - Get from @BotFather
-    OPENAI_API_KEY - Get from platform.openai.com
+    DIGITALOCEAN_API_KEY - Get from cloud.digitalocean.com/account/api/tokens
 """
 
 import os
@@ -1078,24 +1078,27 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
+DIGITALOCEAN_API_KEY = os.environ.get("DIGITALOCEAN_API_KEY", "YOUR_DIGITALOCEAN_API_KEY")
 
 # Bot personality
 BOT_NAME = "{bot.get('name', 'Bot')}"
 SYSTEM_PROMPT = """{bot.get('system_prompt', 'You are a helpful assistant.')}"""
 GREETING = """{bot.get('welcome_message', 'Hello! How can I help you?')}"""
 
-# Initialize OpenAI client
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY != "YOUR_OPENAI_API_KEY" else None
+# Initialize Digital Ocean GenAI client (OpenAI-compatible)
+do_client = OpenAI(
+    base_url="https://cloud.digitalocean.com/gen-ai/api/v1",
+    api_key=DIGITALOCEAN_API_KEY
+) if DIGITALOCEAN_API_KEY != "YOUR_DIGITALOCEAN_API_KEY" else None
 
 # Conversation history storage
 conversations = {{}}
 
 
 async def get_ai_response(user_id: int, message: str) -> str:
-    """Get AI response using OpenAI."""
-    if not openai_client:
-        return "AI is not configured. Please set OPENAI_API_KEY."
+    """Get AI response using Digital Ocean GenAI."""
+    if not do_client:
+        return "AI is not configured. Please set DIGITALOCEAN_API_KEY."
     
     # Get conversation history
     history = conversations.get(user_id, [])
@@ -1107,8 +1110,8 @@ async def get_ai_response(user_id: int, message: str) -> str:
     ]
     
     try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+        response = do_client.chat.completions.create(
+            model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
             messages=messages,
             temperature=0.7,
             max_tokens=1000

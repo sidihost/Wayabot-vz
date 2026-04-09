@@ -3143,7 +3143,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "*Setup:*\n"
                 "1. `pip install python-telegram-bot openai`\n"
                 "2. Get your bot token from @BotFather\n"
-                "3. Get an API key from platform.openai.com\n"
+                "3. Get your Digital Ocean API key from cloud.digitalocean.com\n"
                 "4. Set the environment variables\n"
                 "5. Run: `python my_bot.py`"
             ),
