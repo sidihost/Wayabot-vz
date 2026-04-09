@@ -21,7 +21,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode, ChatAction
 
-from ai_engine import generate_response, get_groq_client, BEST_MODEL
+from ai_engine import generate_response, chat_completion, get_groq_client, BEST_MODEL
 import database as db
 
 # Agent features - DISABLED until properly tested
@@ -611,11 +611,8 @@ async def create_channel_bot_config(
 async def generate_bot_config_with_ai(description: str, user_name: str = "User") -> Dict[str, Any]:
     """
     Use AI to generate a complete bot configuration from a description.
+    Uses the universal chat_completion function that supports multiple providers.
     """
-    client = get_groq_client()
-    if not client:
-        return {"error": "AI service not available"}
-    
     prompt = f"""Create a Telegram bot based on this description: "{description}"
 
 Generate a JSON configuration with these fields:
@@ -641,21 +638,23 @@ Generate a JSON configuration with these fields:
 
 Make it creative, useful, and production-ready. Return ONLY valid JSON."""
 
+    messages = [
+        {"role": "system", "content": "You are a Telegram bot architect. Create detailed, production-ready bot configurations. Return only valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+
     try:
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=BEST_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a Telegram bot architect. Create detailed, production-ready bot configurations. Return only valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1500
-            ),
+        # Use the universal chat_completion that tries multiple providers
+        result = await asyncio.wait_for(
+            chat_completion(messages, temperature=0.7, max_tokens=1500),
             timeout=30.0
         )
         
-        result = response.choices[0].message.content.strip()
+        if not result:
+            # Return fallback if AI completely fails
+            return _create_fallback_config(description)
+        
+        result = result.strip()
         
         # Extract JSON
         if "```json" in result:
@@ -718,6 +717,27 @@ Make it creative, useful, and production-ready. Return ONLY valid JSON."""
             }
         # For other errors, return a user-friendly message
         return {"error": "AI service temporarily unavailable. Please try again in a moment."}
+
+
+def _create_fallback_config(description: str) -> Dict[str, Any]:
+    """Create a fallback bot config when AI is unavailable."""
+    return {
+        "bot_name": "Custom Bot",
+        "bot_description": description[:100] if description else "A helpful AI bot",
+        "greeting_message": "Hello! I'm your assistant. How can I help you today?",
+        "system_prompt": f"You are a helpful AI assistant. {description[:200] if description else 'Be friendly and helpful.'}",
+        "features": ["ai_chat", "commands", "auto_reply"],
+        "commands": [
+            {"command": "start", "description": "Start the bot"},
+            {"command": "help", "description": "Get help"}
+        ],
+        "auto_replies": [],
+        "sample_qa": [],
+        "tone": "friendly",
+        "category": "productivity",
+        "created_by_ai": False,
+        "original_description": description
+    }
 
 
 async def create_bot_with_ai(

@@ -289,6 +289,12 @@ async def _init_schema():
                 bot_type VARCHAR(50) NOT NULL,
                 category VARCHAR(100),
                 
+                -- Telegram Managed Bot fields (for real bots)
+                telegram_bot_id BIGINT UNIQUE,  -- The managed bot's Telegram ID
+                telegram_username VARCHAR(255), -- @username of the managed bot
+                telegram_token TEXT,            -- Bot token (encrypted in production)
+                is_managed_bot BOOLEAN DEFAULT FALSE,  -- True if this is a real Telegram bot
+                
                 -- AI Configuration
                 system_prompt TEXT NOT NULL,
                 welcome_message TEXT,
@@ -1797,6 +1803,80 @@ async def get_bot(bot_id: int) -> Optional[Dict[str, Any]]:
     async with get_connection() as conn:
         bot = await conn.fetchrow("SELECT * FROM custom_bots WHERE id = $1", bot_id)
         return dict(bot) if bot else None
+
+
+async def get_bot_by_telegram_id(telegram_bot_id: int) -> Optional[Dict[str, Any]]:
+    """Get a managed bot by its Telegram bot ID"""
+    async with get_connection() as conn:
+        bot = await conn.fetchrow(
+            "SELECT * FROM custom_bots WHERE telegram_bot_id = $1",
+            telegram_bot_id
+        )
+        return dict(bot) if bot else None
+
+
+async def create_managed_bot(
+    user_id: int,
+    telegram_bot_id: int,
+    telegram_username: str,
+    telegram_token: str,
+    name: str,
+    description: str = None,
+    system_prompt: str = "",
+    welcome_message: str = "Hello! How can I help you?",
+    config: Dict = None
+) -> int:
+    """Create a real Telegram managed bot"""
+    async with get_connection() as conn:
+        bot_id = await conn.fetchval('''
+            INSERT INTO custom_bots (
+                user_id, telegram_bot_id, telegram_username, telegram_token,
+                is_managed_bot, name, description, bot_type, system_prompt,
+                welcome_message, config
+            )
+            VALUES ($1, $2, $3, $4, TRUE, $5, $6, 'managed', $7, $8, $9)
+            ON CONFLICT (telegram_bot_id) DO UPDATE SET
+                telegram_token = EXCLUDED.telegram_token,
+                name = EXCLUDED.name,
+                updated_at = NOW()
+            RETURNING id
+        ''', user_id, telegram_bot_id, telegram_username, telegram_token,
+           name, description, system_prompt, welcome_message, json.dumps(config or {}))
+        
+        await increment_stat(user_id, "total_bots_created")
+        return bot_id
+
+
+async def update_managed_bot_token(telegram_bot_id: int, new_token: str) -> bool:
+    """Update a managed bot's token"""
+    async with get_connection() as conn:
+        result = await conn.execute('''
+            UPDATE custom_bots SET telegram_token = $2, updated_at = NOW()
+            WHERE telegram_bot_id = $1 AND is_managed_bot = TRUE
+        ''', telegram_bot_id, new_token)
+        return "UPDATE 1" in result
+
+
+async def get_user_managed_bots(user_id: int) -> List[Dict[str, Any]]:
+    """Get all real Telegram bots created by a user"""
+    async with get_connection() as conn:
+        rows = await conn.fetch('''
+            SELECT * FROM custom_bots 
+            WHERE user_id = $1 AND is_managed_bot = TRUE
+            ORDER BY created_at DESC
+        ''', user_id)
+        return [dict(row) for row in rows]
+
+
+async def get_all_managed_bots() -> List[Dict[str, Any]]:
+    """Get all active managed bots for the runtime"""
+    async with get_connection() as conn:
+        rows = await conn.fetch('''
+            SELECT * FROM custom_bots 
+            WHERE is_managed_bot = TRUE AND is_active = TRUE
+            ORDER BY created_at DESC
+        ''')
+        return [dict(row) for row in rows]
 
 
 async def get_bot_templates(category: str = None, featured_only: bool = False) -> List[Dict[str, Any]]:

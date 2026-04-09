@@ -47,6 +47,7 @@ from telegram.ext import (
     CommandHandler, 
     MessageHandler, 
     CallbackQueryHandler,
+    TypeHandler,
     filters
 )
 
@@ -79,7 +80,9 @@ from handlers import (
     # Emotion AI (Hume)
     mood_command, emotions_command, empathy_command, wellbeing_command, analyze_voice_emotion,
     handle_message, handle_voice_message, handle_audio_message, handle_photo_message,
-    handle_callback, error_handler
+    handle_callback, error_handler,
+    # Managed Bots (Telegram Bot API 9.6)
+    handle_managed_bot_update
 )
 
 
@@ -187,6 +190,9 @@ async def setup_telegram_app() -> Application:
     # Callback handler for inline keyboards
     app.add_handler(CallbackQueryHandler(handle_callback))
     
+    # Managed bot handler (Telegram Bot API 9.6 - for creating real bots)
+    app.add_handler(TypeHandler(Update, handle_managed_bot_update), group=1)
+    
     # Error handler
     app.add_error_handler(error_handler)
     
@@ -229,7 +235,7 @@ async def lifespan(app: fastapi.FastAPI):
                 webhook_url = f"https://{bot_domain}/webhook"
                 result = await telegram_app.bot.set_webhook(
                     url=webhook_url,
-                    allowed_updates=["message", "callback_query", "poll", "poll_answer"]
+                    allowed_updates=["message", "callback_query", "poll", "poll_answer", "managed_bot"]
                 )
                 if result:
                     print(f"✅ Webhook auto-configured: {webhook_url}")
