@@ -175,6 +175,7 @@ from ai_engine import (
 import bot_builder
 from voice_engine import voice_engine, voice_preferences, VoiceEngine
 from emotion_engine import emotion_engine, EmotionEngine
+from intelligence_core import get_intelligence_core
 
 # AI Agent Features - DISABLED until properly tested
 # These features caused errors and are being reworked
@@ -578,7 +579,7 @@ XP: {current_xp:,} / {xp_for_next:,}
 Current: {stats.get('streak_days', 0)} days
 Longest: {stats.get('longest_streak', 0)} days
 
-*�� Statistics:*
+*���� Statistics:*
 💬 Messages: {stats.get('total_messages', 0):,}
 🤖 AI Requests: {stats.get('total_ai_requests', 0):,}
 ⏰ Reminders: {stats.get('total_reminders_created', 0)} ({stats.get('total_reminders_completed', 0)} done)
@@ -658,7 +659,7 @@ async def remind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "• `/remind Meeting tomorrow at 3pm`\n"
             "• `/remind Take medicine at 9am daily`\n"
             "• `/remind Pay bills on Friday`\n\n"
-            "Just describe when and what! 🎯",
+            "Just describe when and what! ���",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -2656,43 +2657,72 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 voice_name = pref['voice_name']
                 voice_style = pref.get('voice_style', 'default')
     
-    # Use streaming for a live typing effect!
-    try:
-        # Create the streaming generator
-        response_gen = generate_response_streaming(
-            user_message=message_text,
-            conversation_history=history,
-            system_prompt=system_prompt,
-            user_name=get_user_display_name(update)
-        )
-        
-        # Stream the response with typing effect
-        sent_msg, response = await stream_response_to_message(
-            update.message,
-            response_gen,
-            initial_text="Thinking..."
-        )
-        
-        if not response:
-            response = "I apologize, something went wrong. Please try again."
-            await safe_reply_text(update.message, response)
-            return
-            
-    except Exception as e:
-        # Fallback to non-streaming if streaming fails
+    # Try Intelligence Core first (memory, tools, reasoning, learning)
+    intelligence = get_intelligence_core()
+    quick_replies = []
+    
+    if intelligence:
         try:
-            response = await compound_response(
-                user_message=message_text,
-                conversation_history=history
+            # Use the full intelligence pipeline
+            intelligent_response = await intelligence.process_message(
+                user_id=user_id,
+                message=message_text,
+                conversation_history=history,
+                system_prompt=system_prompt,
+                user_name=get_user_display_name(update)
             )
-        except:
-            response = await generate_response(
+            
+            response = intelligent_response.message
+            quick_replies = intelligent_response.quick_replies
+            
+            # Log what engines were used
+            if intelligent_response.engines_used:
+                print(f"[Intelligence] Used engines: {', '.join(intelligent_response.engines_used)}")
+            
+            await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
+            
+        except Exception as intel_error:
+            print(f"[Intelligence] Error: {intel_error}, falling back to basic AI")
+            intelligence = None  # Fall back below
+    
+    if not intelligence:
+        # Fallback: Use streaming for a live typing effect
+        try:
+            # Create the streaming generator
+            response_gen = generate_response_streaming(
                 user_message=message_text,
                 conversation_history=history,
                 system_prompt=system_prompt,
                 user_name=get_user_display_name(update)
             )
-        await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
+            
+            # Stream the response with typing effect
+            sent_msg, response = await stream_response_to_message(
+                update.message,
+                response_gen,
+                initial_text="Thinking..."
+            )
+            
+            if not response:
+                response = "I apologize, something went wrong. Please try again."
+                await safe_reply_text(update.message, response)
+                return
+                
+        except Exception as e:
+            # Fallback to non-streaming if streaming fails
+            try:
+                response = await compound_response(
+                    user_message=message_text,
+                    conversation_history=history
+                )
+            except:
+                response = await generate_response(
+                    user_message=message_text,
+                    conversation_history=history,
+                    system_prompt=system_prompt,
+                    user_name=get_user_display_name(update)
+                )
+            await safe_reply_text(update.message, response, parse_mode=ParseMode.MARKDOWN)
     
     await db.add_conversation(user_id, "assistant", response)
     await db.increment_stat(user_id, "total_ai_requests")
