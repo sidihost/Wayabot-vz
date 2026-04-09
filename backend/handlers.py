@@ -52,6 +52,18 @@ async def _delete_after_delay(msg, delay: int):
     except:
         pass
 
+async def reply_fresh(query, text: str, reply_markup=None, parse_mode=ParseMode.MARKDOWN):
+    """Delete the old message and send a fresh new one - keeps chat clean."""
+    try:
+        await query.message.delete()
+    except:
+        pass
+    return await query.message.chat.send_message(
+        text,
+        parse_mode=parse_mode,
+        reply_markup=reply_markup
+    )
+
 async def send_typing_sequence(update: Update, steps: list):
     """Show typing sequence for multiple steps."""
     for step in steps:
@@ -3021,7 +3033,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await bot_builder.show_bot_builder_menu(update, context)
     
     elif data == "bb_create_ai":
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*What should your bot do?*\n\n"
             "Tell me what you have in mind:\n\n"
             "- `a support bot for my coffee shop`\n"
@@ -3058,7 +3074,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_editname_"):
         bot_id = int(data.replace("bb_editname_", ""))
         await db.update_session_state(user_id, "bb_editing_name", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Edit Bot Name*\n\n"
             "Send the new name for your bot:",
             parse_mode=ParseMode.MARKDOWN
@@ -3067,7 +3087,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_editpersona_"):
         bot_id = int(data.replace("bb_editpersona_", ""))
         await db.update_session_state(user_id, "bb_editing_persona", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*How should your bot act?*\n\n"
             "Just describe what you want to change:\n\n"
             "Example: `make it friendlier and add some humor`\n\n"
@@ -3078,7 +3102,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_editgreet_"):
         bot_id = int(data.replace("bb_editgreet_", ""))
         await db.update_session_state(user_id, "bb_editing_greeting", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*What should your bot say first?*\n\n"
             "This is what users see when they start chatting:",
             parse_mode=ParseMode.MARKDOWN
@@ -3087,7 +3115,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_addcmd_"):
         bot_id = int(data.replace("bb_addcmd_", ""))
         await db.update_session_state(user_id, "bb_adding_command", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Add Custom Command*\n\n"
             "Format: `/command_name | Description | Response`\n\n"
             "Example:\n"
@@ -3099,7 +3131,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_addknow_"):
         bot_id = int(data.replace("bb_addknow_", ""))
         await db.update_session_state(user_id, "bb_adding_knowledge", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Add to Knowledge Base*\n\n"
             "Teach your bot new information.\n\n"
             "Format: `Question | Answer`\n\n"
@@ -3112,7 +3148,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_addauto_"):
         bot_id = int(data.replace("bb_addauto_", ""))
         await db.update_session_state(user_id, "bb_adding_automation", {"bot_id": bot_id})
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Add Automation*\n\n"
             "Create automatic responses for keywords.\n\n"
             "Format: `trigger_word | response`\n\n"
@@ -3134,7 +3174,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard = [[InlineKeyboardButton("Back", callback_data=f"bb_edit_{bot_id}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             f"*Analytics: {analytics['bot_name']}*\n\n"
             f"*Usage*\n"
             f"Total uses: {analytics['total_uses']}\n"
@@ -3154,7 +3198,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_code_"):
         bot_id = int(data.replace("bb_code_", ""))
         
-        await query.message.edit_text("Generating Python code...")
+        try:
+            await query.message.delete()
+        except:
+            pass
+        
+        loading = await query.message.chat.send_message("Generating Python code...")
         
         code = await bot_builder.generate_bot_code(bot_id, user_id)
         
@@ -3166,7 +3215,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard = [[InlineKeyboardButton("Back", callback_data=f"bb_edit_{bot_id}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.reply_document(
+        try:
+            await loading.delete()
+        except:
+            pass
+        
+        await query.message.chat.send_document(
             document=code_file,
             filename="my_bot.py",
             caption=(
@@ -3191,7 +3245,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             "*Delete Bot?*\n\n"
             "This action cannot be undone. All bot data will be lost.\n\n"
             "Are you sure?",
@@ -3208,6 +3266,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 bot_id, user_id
             )
         
+        try:
+            await query.message.delete()
+        except:
+            pass
         await query.answer("Bot deleted!")
         await bot_builder.show_my_bots(update, context)
     
@@ -3224,7 +3286,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard.append([InlineKeyboardButton("Back", callback_data="bb_templates")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        try:
+            await query.message.delete()
+        except:
+            pass
+        await query.message.chat.send_message(
             f"*{cat_info.get('name', 'Category')} Bots*\n\n"
             f"Select a template to create:",
             parse_mode=ParseMode.MARKDOWN,
@@ -3234,12 +3300,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data.startswith("bb_tmpl_"):
         template_name = data.replace("bb_tmpl_", "")
         # Create bot from template using AI
-        await query.message.edit_text("Creating your bot...")
+        try:
+            await query.message.delete()
+        except:
+            pass
+        loading = await query.message.chat.send_message("Creating your bot...")
         
         result = await bot_builder.create_bot_with_ai(update, context, template_name.replace('_', ' '))
         
         if "error" in result:
-            await query.message.edit_text(f"Error: {result['error']}")
+            try:
+                await loading.delete()
+            except:
+                pass
+            await query.message.chat.send_message(f"Oops, something went wrong. Try again!")
             return
         
         config = result["config"]
@@ -3253,21 +3327,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
-            f"*Your AI Bot is Ready!*\n\n"
-            f"*{bot_name}*\n"
+        await reply_fresh(
+            query,
+            f"*{bot_name} is ready!*\n\n"
             f"{config.get('bot_description', '')}\n\n"
-            f"*Share your bot:*\n"
-            f"`{share_link}`\n\n"
-            f"Send a message to start chatting!",
-            parse_mode=ParseMode.MARKDOWN,
+            f"*Share:* `{share_link}`",
             reply_markup=reply_markup
         )
         
         # Send greeting
         greeting = config.get('greeting_message', f"Hi! I'm {bot_name}.")
         clean_greeting = clean_markdown_for_telegram(greeting)
-        await query.message.reply_text(f"*{bot_name}:*\n\n{clean_greeting}", parse_mode=ParseMode.MARKDOWN)
+        await query.message.chat.send_message(f"*{bot_name}:*\n_{clean_greeting}_", parse_mode=ParseMode.MARKDOWN)
     
     elif data.startswith("bb_feat_"):
         feature_key = data.replace("bb_feat_", "")
@@ -3284,7 +3355,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         # Generate bot with selected features
         features_desc = ", ".join([bot_builder.BOT_FEATURE_CARDS[f]['title'] for f in selected])
-        await query.message.edit_text(f"Creating bot with: {features_desc}...")
+        loading = await reply_fresh(query, f"Creating bot with: {features_desc}...")
         
         result = await bot_builder.create_bot_with_ai(
             update, context, 
@@ -3292,7 +3363,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         
         if "error" in result:
-            await query.message.edit_text(f"Error: {result['error']}")
+            try:
+                await loading.delete()
+            except:
+                pass
+            await query.message.chat.send_message("Oops, something went wrong. Try again!")
             return
         
         config = result["config"]
@@ -3306,14 +3381,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
-            f"*Your AI Bot is Ready!*\n\n"
-            f"*{bot_name}*\n"
+        try:
+            await loading.delete()
+        except:
+            pass
+        
+        await query.message.chat.send_message(
+            f"*{bot_name} is ready!*\n\n"
             f"{config.get('bot_description', '')}\n\n"
-            f"*Features:*\n"
-            f"{features_desc}\n\n"
-            f"*Share your bot:*\n"
-            f"`{share_link}`",
+            f"*Features:* {features_desc}\n\n"
+            f"*Share:* `{share_link}`",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
         )
@@ -3323,14 +3400,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not bots:
             await query.answer("You don't have any bots yet!", show_alert=True)
             return
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Edit a Bot*\n\n"
             "Send the bot name or describe what you want to change:\n\n"
             "Examples:\n"
             "- `make my coffee bot more friendly`\n"
             "- `add a pricing command to support bot`\n"
-            "- `change the greeting message`",
-            parse_mode=ParseMode.MARKDOWN
+            "- `change the greeting message`"
         )
         await db.update_session_state(user_id, "bb_edit_prompt", {})
     
@@ -3349,10 +3426,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard.append([InlineKeyboardButton("Back", callback_data="bb_menu")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Bot Analytics*\n\n"
             "Select a bot to view its stats:",
-            parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
         )
     
@@ -3371,11 +3448,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard.append([InlineKeyboardButton("Back", callback_data="bb_menu")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Export Bot Code*\n\n"
             "Get standalone Python code for your bot.\n\n"
             "Select a bot to export:",
-            parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
         )
     
@@ -3388,42 +3465,43 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     elif data == "bb_poll_regular":
         await db.update_session_state(user_id, "bb_creating_poll", {"poll_type": "regular"})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Create Regular Poll*\n\n"
             "Send your poll in this format:\n\n"
             "`Question | Option 1 | Option 2 | Option 3`\n\n"
             "Example:\n"
             "`What's your favorite color? | Red | Blue | Green | Yellow`\n\n"
-            "You can add up to 10 options.",
-            parse_mode=ParseMode.MARKDOWN
+            "You can add up to 10 options."
         )
     
     elif data == "bb_poll_quiz":
         await db.update_session_state(user_id, "bb_creating_poll", {"poll_type": "quiz"})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Create Quiz*\n\n"
             "Send your quiz in this format:\n\n"
             "`Question | Option 1 | Option 2 | ... | correct=N | explanation=Your explanation`\n\n"
             "Example:\n"
             "`What is 2+2? | 3 | 4 | 5 | 22 | correct=2 | explanation=Basic math!`\n\n"
-            "_Note: Options are numbered starting from 1_",
-            parse_mode=ParseMode.MARKDOWN
+            "_Note: Options are numbered starting from 1_"
         )
     
     elif data == "bb_poll_multi":
         await db.update_session_state(user_id, "bb_creating_poll", {"poll_type": "multi"})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Create Multi-Answer Poll*\n\n"
             "Send your poll (users can select multiple options):\n\n"
             "`Question | Option 1 | Option 2 | Option 3`\n\n"
             "Example:\n"
-            "`What features do you want? | Dark mode | Notifications | Analytics | Themes`",
-            parse_mode=ParseMode.MARKDOWN
+            "`What features do you want? | Dark mode | Notifications | Analytics | Themes`"
         )
     
     elif data == "bb_poll_scheduled":
         await db.update_session_state(user_id, "bb_creating_poll", {"poll_type": "scheduled"})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Schedule a Poll*\n\n"
             "Send your poll with schedule:\n\n"
             "`Question | Option 1 | Option 2 | schedule=TIME`\n\n"
@@ -3432,20 +3510,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "- `schedule=2h` (in 2 hours)\n"
             "- `schedule=tomorrow 9am`\n\n"
             "Example:\n"
-            "`Team lunch? | Pizza | Sushi | Tacos | schedule=1h`",
-            parse_mode=ParseMode.MARKDOWN
+            "`Team lunch? | Pizza | Sushi | Tacos | schedule=1h`"
         )
     
     elif data.startswith("bb_addpoll_"):
         bot_id = int(data.replace("bb_addpoll_", ""))
         await db.update_session_state(user_id, "bb_adding_bot_poll", {"bot_id": bot_id})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Add Poll to Bot*\n\n"
             "This poll will be available via a command in your bot.\n\n"
             "Send: `command_name | Question | Option 1 | Option 2 | ...`\n\n"
             "Example:\n"
-            "`feedback | How was your experience? | Great | Good | Okay | Poor`",
-            parse_mode=ParseMode.MARKDOWN
+            "`feedback | How was your experience? | Great | Good | Okay | Poor`"
         )
     
     # ==========================================================================
@@ -3457,11 +3534,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     elif data == "bb_create_business":
         await db.update_session_state(user_id, "bb_business_name", {})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Create Business Bot*\n\n"
             "Let's set up your business bot!\n\n"
-            "First, tell me your *business name*:",
-            parse_mode=ParseMode.MARKDOWN
+            "First, tell me your *business name*:"
         )
     
     elif data == "bb_biz_hours":
@@ -3473,7 +3550,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         
         await db.update_session_state(user_id, "bb_setting_hours", {"bot_id": business_bots[0]['id']})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Set Working Hours*\n\n"
             "Send your working hours:\n\n"
             "Format: `DAY: START-END`\n\n"
@@ -3482,8 +3560,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "Mon-Fri: 9am-5pm\n"
             "Sat: 10am-2pm\n"
             "Sun: closed\n"
-            "```",
-            parse_mode=ParseMode.MARKDOWN
+            "```"
         )
     
     elif data == "bb_biz_away":
@@ -3495,11 +3572,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         
         await db.update_session_state(user_id, "bb_setting_away", {"bot_id": business_bots[0]['id']})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Set Away Message*\n\n"
             "This message will be sent when you're outside working hours.\n\n"
-            "Send your away message:",
-            parse_mode=ParseMode.MARKDOWN
+            "Send your away message:"
         )
     
     elif data == "bb_biz_quick":
@@ -3511,14 +3588,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         
         await db.update_session_state(user_id, "bb_adding_quick_reply", {"bot_id": business_bots[0]['id']})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Add Quick Reply*\n\n"
             "Quick replies auto-respond to common keywords.\n\n"
             "Send: `keyword | response`\n\n"
             "Example:\n"
             "`hours | We're open Mon-Fri 9am-5pm!`\n"
-            "`pricing | Check our website for current pricing.`",
-            parse_mode=ParseMode.MARKDOWN
+            "`pricing | Check our website for current pricing.`"
         )
     
     # ==========================================================================
@@ -3530,11 +3607,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     elif data == "bb_create_channel":
         await db.update_session_state(user_id, "bb_channel_desc", {})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Create Channel Bot*\n\n"
             "I'll help you create a bot to manage your channel!\n\n"
-            "First, describe your channel or what kind of content you post:",
-            parse_mode=ParseMode.MARKDOWN
+            "First, describe your channel or what kind of content you post:"
         )
     
     elif data == "bb_ch_autopost":
@@ -3553,10 +3630,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Auto-Post Settings*\n\n"
             "Choose a content source to auto-post from:",
-            parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
         )
     
@@ -3569,7 +3646,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         
         await db.update_session_state(user_id, "bb_scheduling_post", {"bot_id": channel_bots[0]['id']})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Schedule a Post*\n\n"
             "Send your post content with schedule time:\n\n"
             "Format:\n"
@@ -3579,13 +3657,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "Times: `30m`, `2h`, `tomorrow 9am`, `monday 10am`\n\n"
             "You can also add:\n"
             "- `buttons: Label|URL, Label2|URL2`\n"
-            "- `pin: true` to pin the post",
-            parse_mode=ParseMode.MARKDOWN
+            "- `pin: true` to pin the post"
         )
     
     elif data == "bb_ch_polls":
         await db.update_session_state(user_id, "bb_channel_poll", {})
-        await query.message.edit_text(
+        await reply_fresh(
+            query,
             "*Channel Poll*\n\n"
             "Create a poll for your channel.\n\n"
             "Send: `Question | Option 1 | Option 2 | ...`\n\n"
@@ -3593,8 +3671,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "- `anonymous=false` for public voting\n"
             "- `close=24h` to auto-close\n\n"
             "Example:\n"
-            "`What topic next? | AI Tutorials | Web Dev | DevOps | anonymous=false`",
-            parse_mode=ParseMode.MARKDOWN
+            "`What topic next? | AI Tutorials | Web Dev | DevOps | anonymous=false`"
         )
     
     elif data == "start_chat":
@@ -3852,11 +3929,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             """, user_id, voice_name)
         
         voice_info = VoiceEngine.AVAILABLE_VOICES[voice_name]
-        await query.answer(f"✅ Default voice set to {voice_name}!")
-        await query.message.edit_text(
-            f"✅ *{voice_name}* is now your default voice!\n\n"
-            f"_{voice_info['description']}_",
-            parse_mode=ParseMode.MARKDOWN
+        await query.answer("Default voice updated!")
+        await reply_fresh(
+            query,
+            f"*{voice_name}* is now your default voice!\n\n"
+            f"_{voice_info['description']}_"
         )
     
     elif data.startswith("tryvoice_"):
