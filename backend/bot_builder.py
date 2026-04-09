@@ -1351,10 +1351,8 @@ async def show_my_bots(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     
     keyboard = []
     for bot in bots[:8]:  # Show max 8 bots
-        bot_type = bot.get('bot_type', 'custom')
-        type_icon = {"business": "💼", "channel": "📢", "custom": "🤖"}.get(bot_type, "🤖")
         keyboard.append([
-            InlineKeyboardButton(f"{type_icon} {bot['name']}", callback_data=f"bb_use_{bot['id']}"),
+            InlineKeyboardButton(bot['name'], callback_data=f"bb_use_{bot['id']}"),
             InlineKeyboardButton("Edit", callback_data=f"bb_edit_{bot['id']}")
         ])
     

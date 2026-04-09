@@ -1215,11 +1215,11 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Format features nicely
     if features:
         if isinstance(features[0], dict):
-            feature_list = "\n".join([f"  {f.get('name', f)}" for f in features[:3]])
+            feature_list = "\n".join([f"  - {f.get('name', f)}" for f in features[:3]])
         else:
-            feature_list = "\n".join([f"  {f}" for f in features[:3]])
+            feature_list = "\n".join([f"  - {f}" for f in features[:3]])
     else:
-        feature_list = "  AI-powered responses\n  Context memory\n  Instant replies"
+        feature_list = "  - AI-powered responses\n  - Context memory\n  - Instant replies"
     
     keyboard = [
         [InlineKeyboardButton("Start Chatting", callback_data="start_chat")],
@@ -1228,20 +1228,33 @@ async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await loading_msg.edit_text(
-        f"*{bot_name}* is ready!\n\n"
+    # Delete loading message for clean display
+    try:
+        await loading_msg.delete()
+    except:
+        pass
+    
+    # Send clean final message
+    await update.message.reply_text(
+        f"*{bot_name} is ready!*\n\n"
         f"{desc}\n\n"
-        f"*What it can do:*\n{feature_list}\n\n"
-        f"*Share link:* `{share_link}`\n\n"
-        f"Send a message to start chatting.",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=reply_markup
+        f"*What it can do:*\n{feature_list}",
+        parse_mode=ParseMode.MARKDOWN
     )
     
     # Bot introduces itself
-    await asyncio.sleep(0.3)
     clean_greeting = clean_markdown_for_telegram(greeting)
-    await update.message.reply_text(f"_{clean_greeting}_", parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(
+        f"*{bot_name}:*\n_{clean_greeting}_",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    # Send action buttons separately
+    await update.message.reply_text(
+        "*What would you like to do?*",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=reply_markup
+    )
 
 
 async def templates_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1254,7 +1267,7 @@ async def templates_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("No templates available.")
         return
     
-    text = "📋 *Bot Templates*\n\n"
+    text = "*Bot Templates*\n\n"
     
     categories = {}
     for t in templates:
@@ -1266,8 +1279,8 @@ async def templates_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     for category, temps in categories.items():
         text += f"*{category}:*\n"
         for t in temps:
-            featured = "⭐ " if t.get('is_featured') else ""
-            text += f"  {featured}{t['name']}\n"
+            featured = "(Featured) " if t.get('is_featured') else ""
+            text += f"  - {featured}{t['name']}\n"
         text += "\n"
     
     text += "_Use /build to create from a template!_"
@@ -4502,6 +4515,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     if update and update.effective_message:
         try:
-            await update.effective_message.reply_text(f"❌ {user_message}")
+            await update.effective_message.reply_text(user_message)
         except Exception:
             pass  # Ignore errors when sending error message
