@@ -430,42 +430,41 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Handle the /help command."""
     await track_command(update.effective_user.id, "help")
     
-    help_text = """
-📚 *Waya Command Reference*
+    help_text = """*Waya Command Reference*
 
-*🏠 Basic Commands:*
-`/start` - Welcome message
-`/help` - This help guide
-`/menu` - Interactive menu
-`/profile` - Your stats & level
-`/settings` - Preferences
+*Basic Commands*
+/start - Welcome message
+/help - This help guide
+/menu - Interactive menu
+/profile - Your stats and level
+/settings - Preferences
 
-*⏰ Reminders:*
-`/remind <text>` - Set reminder (natural language!)
-`/reminders` - List pending reminders
-`/delreminder <id>` - Delete reminder
-`/snooze <id> <minutes>` - Snooze reminder
+*Reminders*
+/remind <text> - Set reminder naturally
+/reminders - List pending reminders
+/delreminder <id> - Delete reminder
+/snooze <id> <minutes> - Snooze reminder
 
-*📝 Notes:*
-`/note <title> | <content>` - Create note
-`/notes` - List your notes
-`/searchnotes <query>` - Search notes
-`/delnote <id>` - Delete note
+*Notes*
+/note <title> | <content> - Create note
+/notes - List your notes
+/searchnotes <query> - Search notes
+/delnote <id> - Delete note
 
-*✅ Tasks:*
-`/task <description>` - Create task
-`/tasks` - List your tasks
-`/done <id>` - Complete task
-`/deltask <id>` - Delete task
+*Tasks*
+/task <description> - Create task
+/tasks - List your tasks
+/done <id> - Complete task
+/deltask <id> - Delete task
 
-*Bot Building:*
-`/build` - Create AI bots with natural language
-`/templates` - Browse 20+ templates
-`/mybots` - Manage your bots
-`/usebot <id>` - Activate a bot
+*Bot Building*
+/build - Create AI bots with natural language
+/templates - Browse 20+ templates
+/mybots - Manage your bots
+/usebot <id> - Activate a bot
 
-*Business & Channels:*
-Use the `/build` menu to access:
+*Business and Channels*
+Use /build menu to access:
 - Business bots for Telegram Business
 - Channel bots for scheduling
 - Polls & quizzes for engagement
@@ -585,7 +584,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         [KeyboardButton("⏰ Reminders"), KeyboardButton("✅ Tasks")],
         [KeyboardButton("📝 Notes"), KeyboardButton("🤖 My Bots")],
         [KeyboardButton("💬 Chat"), KeyboardButton("📊 Profile")],
-        [KeyboardButton("⚙️ Settings"), KeyboardButton("❓ Help")]
+        [KeyboardButton("⚙️ Settings"), KeyboardButton("��� Help")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
@@ -1886,8 +1885,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             managed_bot_link = f"https://t.me/newbot/{waya_username}/{suggested_username}?name={bot_name.replace(' ', '+')}"
             
             keyboard = [
-                [InlineKeyboardButton("Create Real Telegram Bot", url=managed_bot_link)],
-                [InlineKeyboardButton("Use as Persona (Chat Here)", callback_data="start_chat")],
+                [InlineKeyboardButton("Launch on Telegram", url=managed_bot_link)],
+                [InlineKeyboardButton("Chat with Bot Here", callback_data="start_chat")],
                 [InlineKeyboardButton("Edit Bot", callback_data=f"bb_edit_{bot_id}")],
                 [InlineKeyboardButton("My Bots", callback_data="bb_my_bots")]
             ]
@@ -1901,15 +1900,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             })
             
             await loading.edit_text(
-                f"*Your AI Bot Configuration is Ready!*\n\n"
+                f"*Your Bot is Ready!*\n\n"
                 f"*{bot_name}*\n"
                 f"{config.get('bot_description', '')}\n\n"
                 f"*Features:*\n" +
                 "\n".join([f"- {f}" for f in config.get('features', [])[:5]]) +
-                f"\n\n*Choose how to use your bot:*\n\n"
-                f"1. *Create Real Bot* - Get your own @{suggested_username} on Telegram\n"
-                f"2. *Use as Persona* - Chat with it here in Waya\n\n"
-                f"_Tip: Creating a real bot lets you share it with anyone!_",
+                f"\n\n*What would you like to do?*\n\n"
+                f"1. *Launch on Telegram* - Deploy as @{suggested_username}\n"
+                f"2. *Chat Here* - Test it right now in Waya\n\n"
+                f"_You can share your bot with anyone once deployed!_",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=reply_markup
             )
@@ -3142,10 +3141,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "*Your Bot Code*\n\n"
                 "This is standalone Python code you can run anywhere!\n\n"
                 "*Setup:*\n"
-                "1. `pip install python-telegram-bot groq`\n"
-                "2. Set `TELEGRAM_BOT_TOKEN` from @BotFather\n"
-                "3. Set `GROQ_API_KEY` from console.groq.com\n"
-                "4. Run: `python my_bot.py`"
+                "1. `pip install python-telegram-bot openai`\n"
+                "2. Get your bot token from @BotFather\n"
+                "3. Get an API key from platform.openai.com\n"
+                "4. Set the environment variables\n"
+                "5. Run: `python my_bot.py`"
             ),
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup

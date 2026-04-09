@@ -1028,7 +1028,7 @@ async def get_bot_analytics(bot_id: int, user_id: int) -> Dict[str, Any]:
 async def generate_bot_code(bot_id: int, user_id: int) -> str:
     """
     Generate complete standalone Python code for a bot.
-    Uses python-telegram-bot library and Groq AI.
+    Uses python-telegram-bot library and OpenAI API.
     """
     bot = await db.get_bot(bot_id)
     if not bot:
@@ -1051,11 +1051,11 @@ async def generate_bot_code(bot_id: int, user_id: int) -> str:
 {bot.get('description', '')}
 
 Requirements:
-    pip install python-telegram-bot groq
+    pip install python-telegram-bot openai
 
 Environment Variables:
     TELEGRAM_BOT_TOKEN - Get from @BotFather
-    GROQ_API_KEY - Get from console.groq.com
+    OPENAI_API_KEY - Get from platform.openai.com
 """
 
 import os
@@ -1067,7 +1067,7 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, 
     CallbackQueryHandler, PollHandler, filters, ContextTypes
 )
-from groq import Groq
+from openai import OpenAI
 
 # Configure logging
 logging.basicConfig(
@@ -1078,24 +1078,24 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "YOUR_GROQ_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
 
 # Bot personality
 BOT_NAME = "{bot.get('name', 'Bot')}"
 SYSTEM_PROMPT = """{bot.get('system_prompt', 'You are a helpful assistant.')}"""
 GREETING = """{bot.get('welcome_message', 'Hello! How can I help you?')}"""
 
-# Initialize Groq client
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY != "YOUR_GROQ_API_KEY" else None
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY != "YOUR_OPENAI_API_KEY" else None
 
 # Conversation history storage
 conversations = {{}}
 
 
 async def get_ai_response(user_id: int, message: str) -> str:
-    """Get AI response using Groq."""
-    if not groq_client:
-        return "AI is not configured. Please set GROQ_API_KEY."
+    """Get AI response using OpenAI."""
+    if not openai_client:
+        return "AI is not configured. Please set OPENAI_API_KEY."
     
     # Get conversation history
     history = conversations.get(user_id, [])
@@ -1107,8 +1107,8 @@ async def get_ai_response(user_id: int, message: str) -> str:
     ]
     
     try:
-        response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=messages,
             temperature=0.7,
             max_tokens=1000
