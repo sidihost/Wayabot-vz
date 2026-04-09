@@ -53,6 +53,7 @@ from telegram.ext import (
 
 import database as db
 from scheduler import WayaScheduler
+from intelligence_core import init_intelligence_core, get_intelligence_core, close_intelligence_core
 
 # Bot runtime - DISABLED until properly tested
 BOT_RUNTIME_AVAILABLE = False
@@ -64,7 +65,7 @@ async def start_bot_runtime():
 async def stop_bot_runtime(): 
     pass
 from handlers import (
-    start_command, help_command, menu_command,
+    start_command, help_command, menu_command, analyze_command,
     remind_command, reminders_command, del_reminder_command, snooze_reminder_command,
     note_command, notes_command, search_notes_command, del_note_command,
     task_command, tasks_command, done_command, del_task_command,
@@ -89,6 +90,7 @@ from handlers import (
 # Global instances
 telegram_app: Optional[Application] = None
 scheduler: Optional[WayaScheduler] = None
+intelligence_core = None  # Intelligence Core instance
 
 
 def get_telegram_token() -> str:
@@ -114,6 +116,7 @@ async def setup_telegram_app() -> Application:
         ("menu", menu_command),
         ("profile", profile_command),
         ("leaderboard", leaderboard_command),
+        ("analyze", analyze_command),  # Profile analyzer - analyze any Telegram user
         
         # Reminders
         ("remind", remind_command),
@@ -202,10 +205,10 @@ async def setup_telegram_app() -> Application:
 @asynccontextmanager
 async def lifespan(app: fastapi.FastAPI):
     """Application lifespan manager."""
-    global telegram_app, scheduler
+    global telegram_app, scheduler, intelligence_core
     
     print("=" * 50)
-    print("🚀 Starting Waya Bot Builder v1.0.0")
+    print("🚀 Starting Waya Bot Builder v2.0.0 - Intelligence Edition")
     print("=" * 50)
     
     # Initialize PostgreSQL database
@@ -215,6 +218,19 @@ async def lifespan(app: fastapi.FastAPI):
     except Exception as e:
         print(f"❌ Database error: {e}")
         raise
+    
+    # Initialize Intelligence Core (Memory, Learning, Tools, Cognition, Proactive)
+    try:
+        intelligence_core = await init_intelligence_core(db._pool)
+        print("✅ Intelligence Core initialized")
+        print("   - Memory Engine: Long-term user memory")
+        print("   - Learning Engine: Personalization & adaptation")
+        print("   - Tools Engine: Web search, code execution, image analysis")
+        print("   - Cognitive Engine: ReAct-style reasoning")
+        print("   - Proactive Engine: Smart suggestions & briefings")
+    except Exception as e:
+        print(f"⚠️ Intelligence Core partial init: {e}")
+        print("   Bot will run with basic AI capabilities")
     
     # Set up Telegram application
     try:
@@ -272,6 +288,11 @@ async def lifespan(app: fastapi.FastAPI):
     
     # Shutdown
     print("\n🛑 Shutting down Waya...")
+    
+    # Close Intelligence Core
+    if intelligence_core:
+        await close_intelligence_core()
+        print("✅ Intelligence Core stopped")
     
     # Stop bot runtime first
     if BOT_RUNTIME_AVAILABLE:
